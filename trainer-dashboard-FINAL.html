@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="theme-color" content="#080b0e"/>
+<title>Trainer Dashboard | Fitness 4Life 120</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700;800;900&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080b0e;--s1:#0e1419;--s2:#131b21;--b1:#1c3040;
+  --teal:#1A7A8A;--teal2:#22a8be;--teal3:rgba(26,122,138,0.12);
+  --gold:#C9A84C;--gold2:rgba(201,168,76,0.12);
+  --green:#2dba80;--red:#e05252;
+  --txt:#dceef4;--muted:#3e6474;--soft:#1a3545;
+}
+html,body{height:100%;background:var(--bg);overflow:hidden;-webkit-tap-highlight-color:transparent}
+body{font-family:'Barlow',sans-serif;color:var(--txt)}
+.app{height:100vh;max-width:430px;margin:0 auto;display:flex;flex-direction:column;overflow:hidden;position:relative;background:var(--bg)}
+/* NAV */
+.topnav{background:var(--s1);border-bottom:1px solid var(--b1);padding:14px 16px 0;flex-shrink:0}
+.tn-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.brand{font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:800;letter-spacing:1.5px;color:var(--teal);text-transform:uppercase}
+.brand-sub{font-size:9px;color:var(--gold);letter-spacing:2px;text-transform:uppercase;font-weight:600;display:block}
+.icon-btn{width:38px;height:38px;background:var(--s2);border:1px solid var(--b1);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:17px;flex-shrink:0;border:none}
+.icon-btn:active{transform:scale(0.9)}
+.tabbar{display:flex}
+.tab{flex:1;padding:10px 4px;background:transparent;border:none;border-bottom:2px solid transparent;font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);cursor:pointer}
+.tab.active{color:var(--teal2);border-bottom-color:var(--teal2)}
+/* SCROLL */
+.scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px 14px 100px}
+.scroll::-webkit-scrollbar{display:none}
+/* BOTTOM NAV */
+.bnav{position:absolute;bottom:0;left:0;right:0;background:var(--s1);border-top:1px solid var(--b1);display:flex;padding:10px 0 18px}
+.bb{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;background:none;border:none;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);padding:0 2px}
+.bb.active{color:var(--teal2)}
+.bb .bi{font-size:21px;line-height:1}
+/* FAB */
+.fab{position:absolute;bottom:72px;right:16px;width:54px;height:54px;background:linear-gradient(135deg,#186476,var(--teal));border:none;border-radius:50%;font-size:28px;color:white;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 20px rgba(26,122,138,0.5);z-index:20}
+.fab:active{transform:scale(0.92)}
+/* CARDS */
+.card{background:var(--s1);border:1px solid var(--b1);border-radius:10px;padding:14px;margin-bottom:10px}
+.clbl{font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;color:var(--gold);margin-bottom:10px}
+/* CLIENT CARDS */
+.cc{background:var(--s1);border:1px solid var(--b1);border-radius:10px;padding:14px 16px;margin-bottom:8px;display:flex;align-items:center;gap:12px;cursor:pointer}
+.cc:active{background:var(--s2)}
+.cc.sel{border-color:var(--teal);background:var(--teal3)}
+.av{width:44px;height:44px;background:linear-gradient(135deg,#186476,var(--teal));border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:800;color:white;flex-shrink:0;text-transform:uppercase}
+.av.sm{width:32px;height:32px;font-size:13px}
+/* EXERCISE ROW */
+.exr{background:var(--s2);border:1px solid var(--b1);border-left:3px solid var(--teal);border-radius:8px;padding:10px 12px;margin-bottom:6px}
+.exr-top{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.exr-name{font-size:13px;font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip{background:var(--soft);border-radius:4px;padding:2px 7px;font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;color:var(--muted);white-space:nowrap;flex-shrink:0}
+.chip.t{color:var(--teal2);background:var(--teal3)}
+.mtag{font-size:9px;color:var(--muted);background:var(--s1);border:1px solid var(--b1);border-radius:3px;padding:1px 5px}
+/* STAT ROW */
+.srow{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px}
+.sbox{background:var(--s1);border:1px solid var(--b1);border-radius:8px;padding:12px 8px;text-align:center}
+.sv{font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:800;color:var(--teal2);line-height:1}
+.sv.g{color:var(--gold)}
+.slbl{font-family:'Barlow Condensed',sans-serif;font-size:9px;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;margin-top:3px;font-weight:700}
+/* MODAL */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,0.78);z-index:50;display:none;align-items:flex-end}
+.overlay.open{display:flex}
+.sheet{background:var(--s1);border-top:1px solid var(--b1);border-radius:16px 16px 0 0;padding:18px 18px 36px;width:100%;max-height:90vh;overflow-y:auto}
+.hdl{width:36px;height:4px;background:var(--b1);border-radius:2px;margin:0 auto 16px}
+.stitle{font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:800;letter-spacing:1px;color:var(--txt);margin-bottom:16px;text-transform:uppercase}
+/* FORM */
+.f{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+.f label{font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted)}
+.f input,.f select,.f textarea{background:var(--bg);border:1.5px solid var(--b1);border-radius:8px;padding:13px;color:var(--txt);font-family:'Barlow',sans-serif;font-size:15px;outline:none;-webkit-appearance:none;width:100%}
+.f input:focus,.f select:focus{border-color:var(--teal)}
+.f select option{background:var(--s1)}
+.f textarea{min-height:80px;resize:none;line-height:1.5}
+.fr2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.fr3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+/* BUTTONS */
+.bp{width:100%;background:linear-gradient(135deg,#186476,var(--teal));color:white;border:none;border-radius:10px;padding:15px;font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;margin-top:4px}
+.bp:active{transform:scale(0.98)}
+.bg_{background:transparent;border:1px solid var(--b1);color:var(--muted);border-radius:8px;padding:12px;font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;width:100%;margin-top:8px}
+.bgold{background:var(--gold2);border:1px solid rgba(201,168,76,0.25);color:var(--gold);border-radius:8px;padding:12px;font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;width:100%}
+.bd_{background:rgba(224,82,82,0.1);border:1px solid rgba(224,82,82,0.25);color:var(--red);border-radius:8px;padding:12px;font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;width:100%;margin-top:6px}
+/* MISC */
+.empty{text-align:center;padding:40px 20px;font-family:'Barlow Condensed',sans-serif;font-size:14px;letter-spacing:1px;color:var(--muted);text-transform:uppercase;line-height:1.6}
+.cbanner{background:var(--teal3);border:1px solid rgba(26,122,138,0.25);border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:10px;margin-bottom:12px;cursor:pointer}
+.sw{position:relative;margin-bottom:12px}
+.sw input{background:var(--s1);border:1px solid var(--b1);border-radius:8px;padding:11px 12px 11px 36px;color:var(--txt);font-family:'Barlow',sans-serif;font-size:14px;width:100%;outline:none}
+.si{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:15px;pointer-events:none}
+.toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);background:var(--green);color:white;border-radius:20px;padding:9px 20px;font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;letter-spacing:1px;z-index:100;white-space:nowrap;opacity:0;transition:opacity 0.2s;pointer-events:none}
+.toast.show{opacity:1}
+.pin-display{font-family:'Barlow Condensed',sans-serif;font-size:32px;font-weight:800;color:var(--teal2);letter-spacing:6px;background:var(--bg);border:1px solid var(--b1);border-radius:8px;padding:14px;text-align:center;margin-bottom:8px}
+.bar-bg{height:5px;background:var(--b1);border-radius:3px;overflow:hidden;margin-top:4px}
+.bar-fill{height:100%;background:var(--teal);border-radius:3px}
+.sdiv{height:1px;background:var(--b1);margin:12px 0}
+.imp-banner{background:var(--gold2);border:1px solid rgba(201,168,76,0.25);border-radius:10px;padding:14px 16px;margin-bottom:12px;display:flex;align-items:center;gap:12px;cursor:pointer}
+.dh{display:flex;align-items:center;gap:8px;margin:14px 0 8px}
+.dl{font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:800;letter-spacing:2px;color:var(--gold);text-transform:uppercase;flex-shrink:0}
+.dline{flex:1;height:1px;background:var(--b1)}
+.dc{font-size:10px;color:var(--muted);background:var(--soft);border-radius:8px;padding:2px 7px;font-weight:600;flex-shrink:0}
+.prog-outer{background:var(--b1);border-radius:4px;height:8px;overflow:hidden;margin:10px 0}
+.prog-inner{height:100%;background:linear-gradient(90deg,var(--teal),var(--teal2));border-radius:4px;transition:width 0.3s}
+.prow{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--b1)}
+</style>
+</head>
+<body>
+<input type="file" id="gtFile" accept=".json" style="display:none"/>
+<div class="toast" id="toast"></div>
+
+<div class="app">
+  <div class="topnav">
+    <div class="tn-row">
+      <div>
+        <div class="brand">Fitness 4Life 120</div>
+        <span class="brand-sub">Trainer Dashboard</span>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="icon-btn" id="switchBtn" style="display:none" onclick="openSheet('pickerSheet')">👤</button>
+        <button class="icon-btn" onclick="onPlusClick()">＋</button>
+      </div>
+    </div>
+    <div class="tabbar" id="tabbar"></div>
+  </div>
+
+  <div class="scroll" id="mainScroll"></div>
+
+  <div class="bnav" id="bnav"></div>
+
+  <button class="fab" id="fab" style="display:none" onclick="onPlusClick()">＋</button>
+</div>
+
+<!-- SHEETS -->
+<div class="overlay" id="addClientSheet">
+  <div class="sheet">
+    <div class="hdl"></div>
+    <div class="stitle">New Client</div>
+    <div class="f"><label>Full Name *</label><input id="ac_name" placeholder="e.g. Carol Johnson"/></div>
+    <div class="f"><label>Goal</label><input id="ac_goal" placeholder="e.g. Lose 20 lbs"/></div>
+    <div class="f"><label>Notes</label><input id="ac_notes" placeholder="Injuries, schedule…"/></div>
+    <div class="sdiv"></div>
+    <div style="font-family:Barlow Condensed;font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;font-weight:700;margin-bottom:10px">Macro Targets</div>
+    <div class="f"><label>Daily Calories</label><input type="number" id="ac_cal" placeholder="1800"/></div>
+    <div class="fr3">
+      <div class="f"><label>Protein (g)</label><input type="number" id="ac_pro" placeholder="150"/></div>
+      <div class="f"><label>Carbs (g)</label><input type="number" id="ac_carb" placeholder="180"/></div>
+      <div class="f"><label>Fat (g)</label><input type="number" id="ac_fat" placeholder="55"/></div>
+    </div>
+    <div class="fr2" style="margin-bottom:0"><div class="f"><label>Body Fat % Goal</label><input type="number" id="ac_bfgoal" placeholder="15.0" step="0.1"/></div><div class="f"><label>Target Weight (lbs)</label><input type="number" id="ac_wtgoal" placeholder="175"/></div></div>
+    <button class="bp" onclick="addClient()">Add Client</button>
+    <button class="bg_" onclick="closeSheet('addClientSheet')">Cancel</button>
+  </div>
+</div>
+
+<div class="overlay" id="pickerSheet">
+  <div class="sheet">
+    <div class="hdl"></div>
+    <div class="stitle">Switch Client</div>
+    <div id="pickerList"></div>
+    <button class="bg_" onclick="closeSheet('pickerSheet')">Close</button>
+  </div>
+</div>
+
+<div class="overlay" id="shareSheet">
+  <div class="sheet">
+    <div class="hdl"></div>
+    <div class="stitle">Share With Client</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:16px;line-height:1.6">Send your client this link and their PIN to access the app.</div>
+    <div style="background:var(--bg);border:1px solid var(--b1);border-radius:8px;padding:12px 14px;font-size:12px;color:var(--teal2);word-break:break-all;margin-bottom:12px">https://fitness4life120.github.io/F4l120-client</div>
+    <div class="pin-display" id="sharePIN">—</div>
+    <div style="font-size:11px;color:var(--muted);text-align:center;margin-bottom:12px">This PIN connects your client to their data</div>
+    <button class="bg_" onclick="closeSheet('shareSheet')">Close</button>
+  </div>
+</div>
+
+<div class="overlay" id="noteSheet">
+  <div class="sheet">
+    <div class="hdl"></div>
+    <div class="stitle">Message to Client</div>
+    <div class="f"><label>Your Note</label><textarea id="noteText" placeholder="Great work this week! Keep pushing…"></textarea></div>
+    <button class="bp" onclick="saveNote()">Send Note</button>
+    <button class="bg_" onclick="closeSheet('noteSheet')">Cancel</button>
+  </div>
+</div>
+
+<div class="overlay" id="planSheet">
+  <div class="sheet">
+    <div class="hdl"></div>
+    <div class="stitle">Assign Workout Plan</div>
+    <div class="fr2">
+      <div class="f"><label>Day</label>
+        <select id="pl_day">
+          <option>Mon</option><option>Tue</option><option>Wed</option><option>Thu</option><option>Fri</option><option>Sat</option><option>Sun</option>
+        </select>
+      </div>
+      <div class="f"><label>Label</label><input id="pl_label" placeholder="Push Day, Legs…"/></div>
+    </div>
+    <div class="sdiv"></div>
+    <div style="font-family:Barlow Condensed;font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;font-weight:700;margin-bottom:10px">Add Exercises</div>
+    <div class="f"><label>Exercise Name</label><input id="pl_exname" placeholder="e.g. Barbell Bench Press"/></div>
+    <div class="fr3">
+      <div class="f"><label>Sets</label><input type="number" id="pl_sets" placeholder="3" value="3"/></div>
+      <div class="f"><label>Reps</label><input id="pl_reps" placeholder="10" value="10"/></div>
+      <div class="f"><label>Muscle</label>
+        <select id="pl_muscle">
+          <option>Chest</option><option>Back</option><option>Shoulders</option><option>Biceps</option><option>Triceps</option><option>Legs</option><option>Glutes</option><option>Core</option><option>Cardio</option><option>Full Body</option>
+        </select>
+      </div>
+    </div>
+    <button class="bgold" onclick="addPlanEx()">+ Add Exercise</button>
+    <div id="planExList" style="margin-top:8px"></div>
+    <button class="bp" style="margin-top:12px" onclick="savePlan()">Save Plan</button>
+    <button class="bg_" onclick="closeSheet('planSheet')">Cancel</button>
+  </div>
+</div>
+
+<div class="overlay" id="importSheet">
+  <div class="sheet">
+    <div class="hdl"></div>
+    <div id="importSheetContent"></div>
+  </div>
+</div>
+
+<div class="overlay" id="editClientSheet">
+  <div class="sheet">
+    <div class="hdl"></div>
+    <div class="stitle">Edit Client</div>
+    <div class="f"><label>Full Name</label><input id="ec_name" placeholder="Full Name"/></div>
+    <div class="f"><label>Goal</label><input id="ec_goal" placeholder="Goal"/></div>
+    <div class="f"><label>Notes</label><input id="ec_notes" placeholder="Notes"/></div>
+    <div class="sdiv"></div>
+    <div style="font-family:Barlow Condensed;font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;font-weight:700;margin-bottom:10px">Macro Targets</div>
+    <div class="f"><label>Daily Calories</label><input type="number" id="ec_cal" placeholder="1800"/></div>
+    <div class="fr3">
+      <div class="f"><label>Protein (g)</label><input type="number" id="ec_pro" placeholder="150"/></div>
+      <div class="f"><label>Carbs (g)</label><input type="number" id="ec_carb" placeholder="180"/></div>
+      <div class="f"><label>Fat (g)</label><input type="number" id="ec_fat" placeholder="55"/></div>
+    </div>
+    <div class="fr2" style="margin-bottom:0"><div class="f"><label>Body Fat % Goal</label><input type="number" id="ec_bfgoal" placeholder="15.0" step="0.1"/></div><div class="f"><label>Target Weight (lbs)</label><input type="number" id="ec_wtgoal" placeholder="175"/></div></div>
+    <button class="bp" onclick="saveEditClient()">Save Changes</button>
+    <button class="bg_" onclick="closeSheet('editClientSheet')">Cancel</button>
+  </div>
+</div>
+
+<div class="overlay" id="logExSheet">
+  <div class="sheet">
+    <div class="hdl"></div>
+    <div class="stitle">Log Exercise</div>
+    <div id="logExClientName" style="font-family:Barlow Condensed;font-size:11px;color:var(--teal2);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px"></div>
+    <div class="f"><label>Exercise Name</label><input id="le_exercise" placeholder="e.g. Barbell Squat"/></div>
+    <div class="fr3">
+      <div class="f"><label>Sets</label><input type="number" id="le_sets" placeholder="4" inputmode="numeric"/></div>
+      <div class="f"><label>Reps</label><input type="number" id="le_reps" placeholder="10" inputmode="numeric"/></div>
+      <div class="f"><label>Weight (lbs)</label><input type="number" id="le_weight" placeholder="135" inputmode="decimal"/></div>
+    </div>
+    <div class="fr2">
+      <div class="f"><label>Muscle Group</label>
+        <select id="le_muscle">
+          <option>Chest</option><option>Back</option><option>Shoulders</option><option>Biceps</option><option>Triceps</option><option>Legs</option><option>Glutes</option><option>Core</option><option>Cardio</option><option>Full Body</option>
+        </select>
+      </div>
+      <div class="f"><label>Date</label><input type="date" id="le_date"/></div>
+    </div>
+    <div class="f"><label>Notes / RPE</label><input id="le_notes" placeholder="PR, RPE 8, felt strong..."/></div>
+    <button class="bp" onclick="saveLogEx()">Log It</button>
+    <button class="bg_" onclick="closeSheet('logExSheet')">Cancel</button>
+  </div>
+</div>
+
+<script>
+const SUPA = "https://egzpfzolkivxgijzqtql.supabase.co";
+const KEY  = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVnenBmem9sa2l2eGdpanpxdHFsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5ODc2NDQsImV4cCI6MjA5MzU2MzY0NH0.RKg7hqJbOxARaC218BLLDNx9IRWnXpoUrAYUz2BE3lg";
+
+async function api(path, opts) {
+  opts = opts || {};
+  var res = await fetch(SUPA + "/rest/v1/" + path, {
+    headers: {"apikey":KEY,"Authorization":"Bearer "+KEY,"Content-Type":"application/json","Prefer":"return=representation"},
+    method: opts.method || "GET",
+    body: opts.body || undefined
+  });
+  var txt = await res.text();
+  return txt ? JSON.parse(txt) : [];
+}
+
+var state = {
+  view: "clients",
+  clients: [],
+  activeId: null,
+  cLogs: [],
+  cProg: [],
+  cPlans: [],
+  planExercises: [],
+  srch: ""
+};
+
+function ini(n) { return n.trim().split(" ").map(function(w){return w[0]||"";}).join("").slice(0,2).toUpperCase(); }
+function tod() { return new Date().toISOString().slice(0,10); }
+function fmt(d) { return new Date(d+"T12:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"}); }
+function genPin() { return Math.floor(1000+Math.random()*9000)+""; }
+function esc(s) { return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+function normCat(c) {
+  if(!c) return "Full Body";
+  var s = c.toLowerCase();
+  if(s.includes("chest")) return "Chest";
+  if(s.includes("tricep")) return "Triceps";
+  if(s.includes("bicep")||s.includes("arm")) return "Biceps";
+  if(s.includes("back")) return "Back";
+  if(s.includes("shoulder")) return "Shoulders";
+  if(s.includes("leg")||s.includes("quad")||s.includes("squat")||s.includes("calf")) return "Legs";
+  if(s.includes("glute")||s.includes("hip")) return "Glutes";
+  if(s.includes("core")||s.includes("ab")) return "Core";
+  if(s.includes("cardio")) return "Cardio";
+  return "Full Body";
+}
+
+function showToast(msg) {
+  var t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  setTimeout(function(){ t.classList.remove("show"); }, 2800);
+}
+
+function openSheet(id) { document.getElementById(id).classList.add("open"); }
+function closeSheet(id) { document.getElementById(id).classList.remove("open"); }
+
+function getActive() { return state.clients.find(function(c){ return c.id === state.activeId; }); }
+
+// ── TABS & NAV ──
+var TABS = ["clients","log","plans","progress","stats"];
+var NAV = [{id:"clients",i:"👥",l:"Clients"},{id:"log",i:"🏋️",l:"Log"},{id:"plans",i:"📋",l:"Plans"},{id:"progress",i:"📈",l:"Progress"},{id:"stats",i:"📊",l:"Stats"}];
+
+function renderNav() {
+  var tb = document.getElementById("tabbar");
+  tb.innerHTML = TABS.map(function(v){
+    return '<button class="tab'+(state.view===v?" active":"")+'" onclick="switchView(\''+v+'\')">'+(v[0].toUpperCase()+v.slice(1))+'</button>';
+  }).join("");
+  var bn = document.getElementById("bnav");
+  bn.innerHTML = NAV.map(function(n){
+    return '<button class="bb'+(state.view===n.id?" active":"")+'" onclick="switchView(\''+n.id+'\')">'+'<span class="bi">'+n.i+'</span>'+n.l+'</button>';
+  }).join("");
+  document.getElementById("switchBtn").style.display = (state.view !== "clients" && getActive()) ? "flex" : "none";
+  document.getElementById("fab").style.display = (state.view === "clients" || (state.view === "log" && getActive())) ? "flex" : "none";
+}
+
+function switchView(v) {
+  if(v !== "clients" && !getActive()) return;
+  state.view = v;
+  renderNav();
+  renderMain();
+}
+
+function onPlusClick() {
+  if(state.view === "clients") openSheet("addClientSheet");
+  else if(state.view === "log" && getActive()) openLogEx();
+}
+
+// ── RENDER MAIN ──
+function renderMain() {
+  var el = document.getElementById("mainScroll");
+  if(state.view === "clients") el.innerHTML = renderClients();
+  else if(state.view === "log") el.innerHTML = renderLog();
+  else if(state.view === "plans") el.innerHTML = renderPlans();
+  else if(state.view === "progress") el.innerHTML = renderProgress();
+  else if(state.view === "stats") el.innerHTML = renderStats();
+}
+
+function clientBanner() {
+  var a = getActive();
+  if(!a) return "";
+  return '<div class="cbanner" onclick="openSheet(\'pickerSheet\')">'
+    +'<div class="av sm">'+ini(a.name)+'</div>'
+    +'<div style="flex:1;font-weight:600;font-size:14px">'+esc(a.name)+'</div>'
+    +'<span style="font-size:11px;color:var(--teal2);font-weight:600">Switch ›</span>'
+    +'</div>';
+}
+
+// CLIENTS VIEW
+function renderClients() {
+  var fC = state.clients.filter(function(c){ return c.name.toLowerCase().includes(state.srch.toLowerCase()); });
+  var html = '<div class="imp-banner" onclick="document.getElementById(\'gtFile\').click()">'
+    +'<span style="font-size:24px;flex-shrink:0">📥</span>'
+    +'<div style="flex:1"><div style="font-family:Barlow Condensed;font-size:13px;font-weight:800;letter-spacing:1px;color:var(--gold);text-transform:uppercase">Import from GymTrainer</div>'
+    +'<div style="font-size:11px;color:var(--muted);margin-top:2px">Tap to select your GymTrainer backup JSON</div></div>'
+    +'<span style="color:var(--gold);font-size:18px">›</span></div>';
+  html += '<div class="sw"><span class="si">🔍</span><input placeholder="Search clients…" value="'+esc(state.srch)+'" oninput="state.srch=this.value;renderMain()"/></div>';
+  html += '<div style="font-family:Barlow Condensed;font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:10px">'+state.clients.length+' clients</div>';
+  if(fC.length === 0) {
+    html += '<div class="empty"><span style="font-size:36px;display:block;margin-bottom:10px">👥</span>'+(state.clients.length===0?"No clients yet\nTap ＋ to add your first":"No results")+'</div>';
+  } else {
+    fC.forEach(function(c){
+      html += '<div class="cc'+(state.activeId===c.id?" sel":"")+'" onclick="selectClient(\''+c.id+'\')">'
+        +'<div class="av">'+ini(c.name)+'</div>'
+        +'<div style="flex:1;min-width:0">'
+        +'<div style="font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(c.name)+'</div>'
+        +'<div style="font-size:11px;color:var(--muted);margin-top:2px">'+esc(c.goal||"No goal")+'  ·  PIN: '+(c.pin||"—")+'</div>'
+        +'</div>'
+        +'<span style="color:var(--muted);font-size:18px">›</span>'
+        +'</div>';
+    });
+  }
+  return html;
+}
+
+// LOG VIEW
+function renderLog() {
+  var a = getActive();
+  if(!a) return '<div class="empty"><span style="font-size:36px;display:block;margin-bottom:10px">👆</span>Select a client first</div>';
+  var grp = {};
+  state.cLogs.forEach(function(e){ if(!grp[e.date]) grp[e.date]=[]; grp[e.date].push(e); });
+  var dates = Object.keys(grp).sort(function(a,b){return b.localeCompare(a);});
+  var html = clientBanner();
+  html += '<button class="bp" style="margin-bottom:12px" onclick="openLogEx()">＋ Log Exercise for ' + esc(a.name) + '</button>';
+  html += '<div class="srow">';
+    +'<div class="sbox"><div class="sv">'+state.cLogs.length+'</div><div class="slbl">Total</div></div>'
+    +'<div class="sbox"><div class="sv">'+dates.length+'</div><div class="slbl">Sessions</div></div>'
+    +'<div class="sbox"><div class="sv g">'+(state.cProg[0]?state.cProg[0].weight+" lbs":"—")+'</div><div class="slbl">Weight</div></div>'
+    +'</div>';
+  if(dates.length === 0) {
+    html += '<div class="empty"><span style="font-size:36px;display:block;margin-bottom:10px">🏋️</span>No workouts logged yet</div>';
+  } else {
+    dates.forEach(function(d){
+      html += '<div class="dh"><span class="dl">'+fmt(d)+'</span><div class="dline"></div><span class="dc">'+grp[d].length+'</span></div>';
+      grp[d].forEach(function(e){
+        var vol = (+e.sets||0)*(+e.reps||0)*(+e.weight||0);
+        html += '<div class="exr"><div class="exr-top">'
+          +'<span class="exr-name">'+esc(e.exercise)+'</span>'
+          +(e.weight?'<span class="chip t">'+e.weight+' lbs</span>':'')
+          +(e.from_plan?'<span class="chip" style="color:var(--gold);background:var(--gold2)">Plan</span>':'')
+          +'</div><div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">'
+          +(e.muscle?'<span class="mtag">'+esc(e.muscle)+'</span>':'')
+          +(e.sets?'<span class="chip">'+e.sets+'×'+(e.reps||"?")+'</span>':'')
+          +(vol>0?'<span class="chip" style="font-size:9px;color:var(--muted)">'+vol.toLocaleString()+' vol</span>':'')
+          +'</div></div>';
+      });
+    });
+  }
+  return html;
+}
+
+// PLANS VIEW
+function renderPlans() {
+  var a = getActive();
+  if(!a) return '<div class="empty"><span style="font-size:36px;display:block;margin-bottom:10px">👆</span>Select a client first</div>';
+  var DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+  var html = clientBanner();
+  html += '<div style="display:flex;gap:8px;margin-bottom:12px">'
+    +'<button class="bgold" onclick="openSheet(\'planSheet\')">+ Assign Plan</button>'
+    +'<button class="bgold" style="background:transparent" onclick="openNoteSheet()">📣 Note</button>'
+    +'</div>';
+  if(state.cPlans.length === 0) {
+    html += '<div class="empty"><span style="font-size:36px;display:block;margin-bottom:10px">📋</span>No plans assigned yet</div>';
+  } else {
+    DAYS.forEach(function(day){
+      var plan = state.cPlans.find(function(p){return p.day===day;});
+      if(!plan) return;
+      html += '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+        +'<div><div class="clbl" style="margin-bottom:2px">'+day+'</div><div style="font-size:14px;font-weight:700">'+esc(plan.label)+'</div></div>'
+        +'<div style="display:flex;gap:6px">'
+        +'<button class="chip" style="cursor:pointer" onclick="editPlan(\''+plan.id+'\',\''+day+'\')">Edit</button>'
+        +'<button class="chip" style="cursor:pointer;color:var(--red)" onclick="deletePlan(\''+plan.id+'\')">✕</button>'
+        +'</div></div>';
+      (plan.exercises||[]).forEach(function(ex){
+        html += '<div style="background:var(--bg);border:1px solid var(--b1);border-left:3px solid var(--gold);border-radius:7px;padding:10px 12px;margin-bottom:6px">'
+          +'<div style="font-size:13px;font-weight:600">'+esc(ex.name)+'</div>'
+          +'<div style="font-size:11px;color:var(--muted);margin-top:2px">'+ex.sets+' sets × '+ex.reps+' reps · '+esc(ex.muscle)+'</div>'
+          +'</div>';
+      });
+      html += '</div>';
+    });
+  }
+  return html;
+}
+
+// PROGRESS VIEW
+function renderProgress() {
+  var a = getActive();
+  if(!a) return '<div class="empty"><span style="font-size:36px;display:block;margin-bottom:10px">👆</span>Select a client first</div>';
+  var html = clientBanner();
+  if(a.calories > 0) {
+    html += '<div class="card"><div class="clbl">Assigned Macros</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center">';
+    [{l:"Cal",v:a.calories,c:"var(--teal2)"},{l:"Protein",v:a.protein+"g",c:"var(--teal2)"},{l:"Carbs",v:a.carbs+"g",c:"var(--green)"},{l:"Fat",v:a.fat+"g",c:"var(--gold)"}].forEach(function(m){
+      html += '<div style="background:var(--bg);border:1px solid var(--b1);border-radius:7px;padding:10px 6px">'
+        +'<div style="font-family:Barlow Condensed;font-size:18px;font-weight:800;color:'+m.c+';line-height:1">'+m.v+'</div>'
+        +'<div style="font-family:Barlow Condensed;font-size:9px;letter-spacing:1px;color:var(--muted);text-transform:uppercase;margin-top:3px">'+m.l+'</div>'
+        +'</div>';
+    });
+    html += '</div></div>';
+  }
+  if(a.bf_goal || a.wt_goal) {
+    html += '<div class="card"><div class="clbl">Body Composition Goals</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;text-align:center">';
+    if(a.bf_goal) html += '<div style="background:var(--bg);border:1px solid var(--b1);border-radius:7px;padding:12px 8px"><div style="font-family:Barlow Condensed;font-size:22px;font-weight:800;color:var(--gold);line-height:1">'+a.bf_goal+'%</div><div style="font-family:Barlow Condensed;font-size:9px;letter-spacing:1px;color:var(--muted);text-transform:uppercase;margin-top:3px">BF% Goal</div></div>';
+    if(a.wt_goal) html += '<div style="background:var(--bg);border:1px solid var(--b1);border-radius:7px;padding:12px 8px"><div style="font-family:Barlow Condensed;font-size:22px;font-weight:800;color:var(--green);line-height:1">'+a.wt_goal+' lbs</div><div style="font-family:Barlow Condensed;font-size:9px;letter-spacing:1px;color:var(--muted);text-transform:uppercase;margin-top:3px">Weight Goal</div></div>';
+    html += '</div></div>';
+  }
+  html += '<div class="card"><div class="clbl">Weight History</div>';
+  if(state.cProg.length === 0) {
+    html += '<div style="color:var(--muted);font-size:12px;font-style:italic">No entries yet</div>';
+  } else {
+    state.cProg.forEach(function(p,i){
+      var nxt = state.cProg[i+1];
+      var d = nxt ? (p.weight-nxt.weight).toFixed(1) : null;
+      var badge = d!==null ? '<span style="background:'+(+d<0?"rgba(45,186,128,0.15)":"rgba(224,82,82,0.15)")+';color:'+(+d<0?"var(--green)":"var(--red)")+';padding:2px 7px;border-radius:4px;font-family:Barlow Condensed;font-size:11px;font-weight:700">'+(+d>0?"+":"")+d+'</span>' : "";
+      html += '<div class="prow">'
+        +'<div style="font-family:Barlow Condensed;font-size:11px;color:var(--gold);font-weight:700;width:80px;flex-shrink:0">'+p.date+'</div>'
+        +'<div style="flex:1"><div style="font-size:14px;font-weight:700;color:var(--teal2)">'+p.weight+' lbs</div>'+(p.body_fat?'<div style="font-size:11px;color:var(--muted)">'+p.body_fat+'% BF</div>':'')+'</div>'
+        +badge+'</div>';
+    });
+  }
+  html += '</div>';
+  return html;
+}
+
+// STATS VIEW
+function renderStats() {
+  var a = getActive();
+  if(!a) return '<div class="empty"><span style="font-size:36px;display:block;margin-bottom:10px">👆</span>Select a client first</div>';
+  var allVol = state.cLogs.reduce(function(s,e){return s+((+e.sets||0)*(+e.reps||0)*(+e.weight||0));},0);
+  var grp = {}; state.cLogs.forEach(function(e){if(!grp[e.date])grp[e.date]=[];grp[e.date].push(e);});
+  var mCnt = {}; state.cLogs.forEach(function(e){mCnt[e.muscle]=(mCnt[e.muscle]||0)+1;});
+  var bests = {}; state.cLogs.forEach(function(e){if(e.weight&&(!bests[e.exercise]||+e.weight>+bests[e.exercise]))bests[e.exercise]=e.weight;});
+  var html = clientBanner();
+  html += '<div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:8px"><button class="chip" style="cursor:pointer;color:var(--teal2);background:var(--teal3)" onclick="openEditClient()">✏️ Edit</button><button class="chip t" style="cursor:pointer" onclick="openShare()">📤 Share</button></div>';
+  html += '<div class="card"><div class="clbl">All-Time Volume</div><div style="text-align:center;padding:8px 0">'
+    +'<div style="font-family:Barlow Condensed;font-size:48px;font-weight:900;color:var(--teal2);line-height:1">'+(allVol>0?allVol.toLocaleString():"—")+'</div>'
+    +'<div style="font-family:Barlow Condensed;font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-top:3px">Total lbs moved</div>'
+    +'</div></div>';
+  html += '<button class="bp" style="margin-bottom:12px" onclick="openLogEx()">＋ Log Exercise for ' + esc(a.name) + '</button>';
+  html += '<div class="srow">';
+    +'<div class="sbox"><div class="sv">'+state.cLogs.length+'</div><div class="slbl">Exercises</div></div>'
+    +'<div class="sbox"><div class="sv">'+Object.keys(grp).length+'</div><div class="slbl">Sessions</div></div>'
+    +'<div class="sbox"><div class="sv g">'+state.cPlans.length+'</div><div class="slbl">Plans</div></div>'
+    +'</div>';
+  html += '<div class="card"><div class="clbl">Muscle Groups</div>';
+  var mcEntries = Object.entries(mCnt).sort(function(a,b){return b[1]-a[1];});
+  var mcMax = mcEntries.length ? mcEntries[0][1] : 1;
+  mcEntries.forEach(function(entry){
+    html += '<div style="margin-bottom:9px"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px"><span style="font-weight:600">'+esc(entry[0])+'</span><span style="color:var(--muted)">'+entry[1]+'</span></div>'
+      +'<div class="bar-bg"><div class="bar-fill" style="width:'+(entry[1]/mcMax*100)+'%"></div></div></div>';
+  });
+  if(!mcEntries.length) html += '<div style="color:var(--muted);font-size:12px;font-style:italic">No data yet</div>';
+  html += '</div>';
+  var prEntries = Object.entries(bests).sort(function(a,b){return b[1]-a[1];}).slice(0,8);
+  html += '<div class="card"><div class="clbl">Personal Records</div>';
+  if(prEntries.length) {
+    prEntries.forEach(function(entry){
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--b1)">'
+        +'<span style="font-size:13px;font-weight:500">'+esc(entry[0])+'</span>'
+        +'<span style="font-family:Barlow Condensed;font-size:15px;font-weight:700;color:var(--teal2)">'+entry[1]+' lbs</span>'
+        +'</div>';
+    });
+  } else {
+    html += '<div style="color:var(--muted);font-size:12px;font-style:italic">No PRs yet</div>';
+  }
+  html += '</div>';
+  html += '<button class="bd_" onclick="deleteActiveClient()">🗑 Remove Client</button>';
+  return html;
+}
+
+// ── ACTIONS ──
+async function loadClients() {
+  try {
+    var data = await api("clients?select=*&order=name.asc");
+    state.clients = data;
+  } catch(e) { showToast("Could not connect to database"); }
+  renderNav(); renderMain();
+}
+
+async function loadClientData(id) {
+  try {
+    var results = await Promise.all([
+      api("workout_logs?client_id=eq."+id+"&order=created_at.desc"),
+      api("progress_logs?client_id=eq."+id+"&order=date.desc"),
+      api("workout_plans?client_id=eq."+id+"&order=day.asc")
+    ]);
+    state.cLogs = results[0]; state.cProg = results[1]; state.cPlans = results[2];
+  } catch(e) { showToast("Error loading data"); }
+}
+
+async function selectClient(id) {
+  state.activeId = id;
+  state.view = "log";
+  closeSheet("pickerSheet");
+  renderNav();
+  document.getElementById("mainScroll").innerHTML = '<div class="empty">Loading…</div>';
+  await loadClientData(id);
+  renderNav(); renderMain();
+  renderPicker();
+}
+
+async function addClient() {
+  var name = document.getElementById("ac_name").value.trim();
+  if(!name) return;
+  try {
+    var pin = genPin();
+    var data = await api("clients", {method:"POST", body:JSON.stringify({
+      name:name, goal:document.getElementById("ac_goal").value.trim(),
+      notes:document.getElementById("ac_notes").value.trim(),
+      calories:+document.getElementById("ac_cal").value||0,
+      protein:+document.getElementById("ac_pro").value||0,
+      carbs:+document.getElementById("ac_carb").value||0,
+      fat:+document.getElementById("ac_fat").value||0,
+      pin:pin
+    })});
+    state.clients.push(data[0]);
+    state.clients.sort(function(a,b){return a.name.localeCompare(b.name);});
+    ["ac_name","ac_goal","ac_notes","ac_cal","ac_pro","ac_carb","ac_fat","ac_bfgoal","ac_wtgoal"].forEach(function(id){document.getElementById(id).value="";});
+    closeSheet("addClientSheet");
+    showToast(name + " added — PIN: " + pin);
+    renderMain();
+  } catch(e) { showToast("Could not add client"); }
+}
+
+async function deleteActiveClient() {
+  if(!state.activeId) return;
+  try {
+    await api("clients?id=eq."+state.activeId, {method:"DELETE"});
+    state.clients = state.clients.filter(function(c){return c.id!==state.activeId;});
+    state.activeId = null; state.view = "clients";
+    showToast("Client removed");
+    renderNav(); renderMain();
+  } catch(e) { showToast("Error removing client"); }
+}
+
+function openShare() {
+
+function openLogEx() {
+  var a = getActive(); if(!a) return;
+  document.getElementById("logExClientName").textContent = a.name;
+  document.getElementById("le_exercise").value = "";
+  document.getElementById("le_sets").value = "";
+  document.getElementById("le_reps").value = "";
+  document.getElementById("le_weight").value = "";
+  document.getElementById("le_notes").value = "";
+  document.getElementById("le_date").value = tod();
+  openSheet("logExSheet");
+}
+
+async function saveLogEx() {
+  var ex = document.getElementById("le_exercise").value.trim();
+  if(!ex || !state.activeId) return;
+  try {
+    var data = await api("workout_logs", {method:"POST", body:JSON.stringify({
+      client_id: state.activeId,
+      exercise: ex,
+      sets: document.getElementById("le_sets").value,
+      reps: document.getElementById("le_reps").value,
+      weight: document.getElementById("le_weight").value,
+      muscle: document.getElementById("le_muscle").value,
+      notes: document.getElementById("le_notes").value.trim(),
+      date: document.getElementById("le_date").value || tod(),
+      from_plan: false
+    })});
+    state.cLogs.unshift(data[0]);
+    closeSheet("logExSheet");
+    showToast("Exercise logged for " + getActive().name);
+    renderMain();
+  } catch(e) { showToast("Could not save exercise"); }
+}
+
+function openEditClient() {
+  var a = getActive(); if(!a) return;
+  document.getElementById("ec_name").value = a.name || "";
+  document.getElementById("ec_goal").value = a.goal || "";
+  document.getElementById("ec_notes").value = a.notes || "";
+  document.getElementById("ec_cal").value = a.calories || "";
+  document.getElementById("ec_pro").value = a.protein || "";
+  document.getElementById("ec_carb").value = a.carbs || "";
+  document.getElementById("ec_fat").value = a.fat || "";
+  document.getElementById("ec_bfgoal").value = a.bf_goal || "";
+  document.getElementById("ec_wtgoal").value = a.wt_goal || "";
+  openSheet("editClientSheet");
+}
+
+async function saveEditClient() {
+  var a = getActive(); if(!a) return;
+  var name = document.getElementById("ec_name").value.trim();
+  if(!name) return;
+  try {
+    await api("clients?id=eq."+a.id, {method:"PATCH", body:JSON.stringify({
+      name:name,
+      goal:document.getElementById("ec_goal").value.trim(),
+      notes:document.getElementById("ec_notes").value.trim(),
+      calories:+document.getElementById("ec_cal").value||0,
+      protein:+document.getElementById("ec_pro").value||0,
+      carbs:+document.getElementById("ec_carb").value||0,
+      fat:+document.getElementById("ec_fat").value||0
+    })});
+    var idx = state.clients.findIndex(function(c){return c.id===a.id;});
+    if(idx !== -1) {
+      state.clients[idx].name = name;
+      state.clients[idx].goal = document.getElementById("ec_goal").value.trim();
+      state.clients[idx].notes = document.getElementById("ec_notes").value.trim();
+      state.clients[idx].calories = +document.getElementById("ec_cal").value||0;
+      state.clients[idx].protein = +document.getElementById("ec_pro").value||0;
+      state.clients[idx].carbs = +document.getElementById("ec_carb").value||0;
+      state.clients[idx].fat = +document.getElementById("ec_fat").value||0;
+      state.clients[idx].bf_goal = +document.getElementById("ec_bfgoal").value||null;
+      state.clients[idx].wt_goal = +document.getElementById("ec_wtgoal").value||null;
+    }
+    closeSheet("editClientSheet");
+    showToast("Client updated");
+    renderMain();
+  } catch(e) { showToast("Could not save changes"); }
+}
+  var a = getActive(); if(!a) return;
+  document.getElementById("sharePIN").textContent = a.pin || "—";
+  openSheet("shareSheet");
+}
+
+async function openNoteSheet() {
+  try {
+    var notes = await api("trainer_notes?client_id=eq."+state.activeId);
+    document.getElementById("noteText").value = notes[0] ? notes[0].message : "";
+  } catch(e) {}
+  openSheet("noteSheet");
+}
+
+async function saveNote() {
+  var msg = document.getElementById("noteText").value.trim();
+  if(!msg || !state.activeId) return;
+  try {
+    var ex = await api("trainer_notes?client_id=eq."+state.activeId);
+    if(ex.length) await api("trainer_notes?client_id=eq."+state.activeId, {method:"PATCH", body:JSON.stringify({message:msg})});
+    else await api("trainer_notes", {method:"POST", body:JSON.stringify({client_id:state.activeId,message:msg})});
+    closeSheet("noteSheet"); showToast("Note sent");
+  } catch(e) { showToast("Could not save note"); }
+}
+
+// PLAN
+function addPlanEx() {
+  var name = document.getElementById("pl_exname").value.trim();
+  if(!name) return;
+  state.planExercises.push({
+    name:name,
+    sets:+document.getElementById("pl_sets").value||3,
+    reps:document.getElementById("pl_reps").value||"10",
+    muscle:document.getElementById("pl_muscle").value
+  });
+  document.getElementById("pl_exname").value = "";
+  renderPlanExList();
+}
+
+function renderPlanExList() {
+  var el = document.getElementById("planExList");
+  el.innerHTML = state.planExercises.map(function(ex,i){
+    return '<div style="background:var(--bg);border:1px solid var(--b1);border-left:3px solid var(--gold);border-radius:7px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:8px">'
+      +'<div style="flex:1"><div style="font-size:13px;font-weight:600">'+esc(ex.name)+'</div>'
+      +'<div style="font-size:11px;color:var(--muted);margin-top:2px">'+ex.sets+'×'+ex.reps+' · '+esc(ex.muscle)+'</div></div>'
+      +'<button style="background:transparent;border:none;color:var(--soft);cursor:pointer;font-size:14px;padding:3px 6px" onclick="removePlanEx('+i+')">✕</button>'
+      +'</div>';
+  }).join("");
+}
+
+function removePlanEx(i) {
+  state.planExercises.splice(i,1);
+  renderPlanExList();
+}
+
+async function savePlan() {
+  var label = document.getElementById("pl_label").value.trim();
+  var day = document.getElementById("pl_day").value;
+  if(!label || !state.planExercises.length || !state.activeId) return;
+  try {
+    var ex = state.cPlans.find(function(p){return p.day===day;});
+    if(ex) await api("workout_plans?id=eq."+ex.id, {method:"PATCH", body:JSON.stringify({label:label,exercises:state.planExercises})});
+    else await api("workout_plans", {method:"POST", body:JSON.stringify({client_id:state.activeId,day:day,label:label,exercises:state.planExercises})});
+    await loadClientData(state.activeId);
+    state.planExercises = [];
+    document.getElementById("pl_label").value = "";
+    document.getElementById("planExList").innerHTML = "";
+    closeSheet("planSheet");
+    showToast("Plan saved");
+    renderMain();
+  } catch(e) { showToast("Could not save plan"); }
+}
+
+function editPlan(planId, day) {
+  var plan = state.cPlans.find(function(p){return p.id===planId;});
+  if(!plan) return;
+  document.getElementById("pl_day").value = day;
+  document.getElementById("pl_label").value = plan.label || "";
+  state.planExercises = (plan.exercises||[]).slice();
+  renderPlanExList();
+  openSheet("planSheet");
+}
+
+async function deletePlan(planId) {
+  try {
+    await api("workout_plans?id=eq."+planId, {method:"DELETE"});
+    await loadClientData(state.activeId);
+    showToast("Plan removed");
+    renderMain();
+  } catch(e) { showToast("Error"); }
+}
+
+// PICKER
+function renderPicker() {
+  var el = document.getElementById("pickerList");
+  el.innerHTML = state.clients.map(function(c){
+    return '<div class="cc'+(state.activeId===c.id?" sel":"")+'" onclick="selectClient(\''+c.id+'\')">'
+      +'<div class="av">'+ini(c.name)+'</div>'
+      +'<div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(c.name)+'</div>'
+      +'<div style="font-size:11px;color:var(--muted);margin-top:2px">'+esc(c.goal||"No goal")+'</div></div>'
+      +(state.activeId===c.id?'<span style="color:var(--teal2);font-size:18px">✓</span>':'')
+      +'</div>';
+  }).join("");
+}
+
+// ── GYMTRAINER IMPORT ──
+document.getElementById("gtFile").addEventListener("change", function(e) {
+  var file = e.target.files[0]; if(!file) return;
+  var r = new FileReader();
+  r.onload = function(ev) {
+    try {
+      var data = JSON.parse(ev.target.result);
+      if(!data.data || !data.data.clients) { showToast("Not a valid GymTrainer backup file"); return; }
+      var exMap = {};
+      (data.data.exercises||[]).forEach(function(ex){ exMap[ex.name] = normCat(ex.category); });
+      showImportPreview(data.data.clients, data.data.logs||[], exMap);
+    } catch(err) { showToast("Could not read file"); }
+  };
+  r.readAsText(file);
+  e.target.value = "";
+});
+
+var importData = null;
+
+function showImportPreview(clients, logs, exMap) {
+  importData = {clients:clients, logs:logs, exMap:exMap};
+  var el = document.getElementById("importSheetContent");
+  el.innerHTML = '<div class="stitle">Import GymTrainer Data</div>'
+    +'<div style="background:var(--bg);border:1px solid var(--b1);border-radius:8px;padding:14px;margin-bottom:14px">'
+    +'<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--b1)"><span style="font-size:13px;color:var(--muted)">Clients found</span><span style="font-family:Barlow Condensed;font-size:22px;font-weight:800;color:var(--teal2)">'+clients.length+'</span></div>'
+    +'<div style="display:flex;justify-content:space-between;padding:7px 0"><span style="font-size:13px;color:var(--muted)">Workout logs</span><span style="font-family:Barlow Condensed;font-size:22px;font-weight:800;color:var(--teal2)">'+logs.length+'</span></div>'
+    +'</div>'
+    +'<div style="background:var(--gold2);border:1px solid rgba(201,168,76,0.2);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--gold);line-height:1.5">Each client gets a new PIN automatically. Share their PIN + the client app link so they can log in.</div>'
+    +'<button class="bp" onclick="runGTImport()">Import Now</button>'
+    +'<button class="bg_" onclick="closeSheet(\'importSheet\')">Cancel</button>';
+  openSheet("importSheet");
+}
+
+async function runGTImport() {
+  if(!importData) return;
+  var el = document.getElementById("importSheetContent");
+  el.innerHTML = '<div style="text-align:center;padding:20px 0">'
+    +'<div style="font-family:Barlow Condensed;font-size:18px;font-weight:800;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px">Importing...</div>'
+    +'<div style="font-size:12px;color:var(--muted);margin-bottom:4px">Adding clients and workout history</div>'
+    +'<div class="prog-outer"><div class="prog-inner" id="impBar" style="width:5%"></div></div>'
+    +'<div style="font-size:12px;color:var(--teal2);margin-top:8px" id="impPct">5%</div>'
+    +'</div>';
+
+  var gtC = importData.clients;
+  var gtL = importData.logs;
+  var exMap = importData.exMap;
+  var done = 0;
+
+  for(var i=0; i<gtC.length; i++) {
+    var c = gtC[i];
+    try {
+      var pin = genPin();
+      var ncData = await api("clients", {method:"POST", body:JSON.stringify({name:c.name.trim(),goal:c.goal||"",notes:"",calories:0,protein:0,carbs:0,fat:0,pin:pin})});
+      var nc = ncData[0];
+      var clientLogs = gtL.filter(function(l){return l.clientId===c.id;});
+      for(var j=0; j<clientLogs.length; j++) {
+        var l = clientLogs[j];
+        try {
+          await api("workout_logs", {method:"POST", body:JSON.stringify({
+            client_id:nc.id, exercise:l.exerciseName||"",
+            sets:l.sets?""+l.sets:"", reps:l.reps?""+l.reps:"", weight:l.weight?""+l.weight:"",
+            muscle:exMap[l.exerciseName]||"Full Body", notes:"",
+            date:(l.date||tod()).slice(0,10), from_plan:false
+          })});
+        } catch(e2) {}
+      }
+    } catch(e) {}
+    done++;
+    var pct = Math.round(5 + (done/gtC.length)*90);
+    var bar = document.getElementById("impBar");
+    var pctEl = document.getElementById("impPct");
+    if(bar) bar.style.width = pct+"%";
+    if(pctEl) pctEl.textContent = pct+"%";
+  }
+
+  await loadClients();
+  closeSheet("importSheet");
+  importData = null;
+  showToast("Imported "+gtC.length+" clients & "+gtL.length+" workouts");
+}
+
+// INIT
+loadClients().then(function(){ renderPicker(); });
+</script>
+</body>
+</html>
