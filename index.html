@@ -446,8 +446,7 @@ function logout() {
   }
   if(v === "nutrition" && state.activeId) {
     loadNutritionLogs(state.activeId).then(function(){ renderMain(); });
-  }
-}
+  
 }
 
 function onPlusClick() {
