@@ -427,13 +427,15 @@ function renderNav() {
   if(atFab) atFab.style.display = (state.view === "trainers" && state.isAdmin) ? "block" : "none";
 }
 
-function switchView(v) {
-  if(v !== "clients" && v !== "trainers" && !getActive()) return;
-  state.view = v;
-  renderNav();
-  renderMain();
-  if(v === "log" && state.activeId) {
-    loadClientData(state.activeId).then(function(){ renderMain(); });
+function logout() {
+  state.trainer = null;
+  state.isAdmin = false;
+  state.clients = [];
+  state.activeId = null;
+  var lbl = document.getElementById("trainerLabel");
+  if(lbl) lbl.textContent = "Trainer Dashboard";
+  showLoginOverlay();
+}
   function switchView(v) {
   if(v !== "clients" && v !== "trainers" && !getActive()) return;
   state.view = v;
