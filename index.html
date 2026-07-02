@@ -1775,7 +1775,7 @@ var NUTRITION_PROMPT_TEMPLATE = function (description) {
 };
 
 async function analyzeMealText(description) {
-  var res = await fetch("https://api.anthropic.com/v1/messages", {
+  var res = await fetch("https://poetic-blancmange-2af485.netlify.app/.netlify/functions/claude", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -1793,7 +1793,7 @@ async function analyzeMealPhoto(base64, mediaType, captionText) {
   var instructions = "Look at this meal photo"
     + (captionText ? ' (the person also noted: "' + captionText + '")' : "")
     + " and estimate the nutrition facts. Use the plate, portion sizes, and visible ingredients to judge quantities as accurately as possible.";
-  var res = await fetch("https://api.anthropic.com/v1/messages", {
+  var res = await fetch("https://poetic-blancmange-2af485.netlify.app/.netlify/functions/claude", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
