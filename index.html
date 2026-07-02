@@ -1743,7 +1743,111 @@ document.addEventListener("click", function(e) {
   if(id === "saveEditClientBtn") { e.preventDefault(); saveEditClient(); }
 });
 
-// Always show login on load
+// F4L120 NUTRITION LOGGING MODULE
+
+state.nLogs = [];
+state.nDate = tod();
+state.nAnalyzing = false;
+state.nAnalysisResult = null;
+state.nMealTime = "Breakfast";
+state.nPhotoBase64 = null;
+state.nPhotoMediaType = null;
+state.nMode = "text";
+
+var MEAL_TIMES = ["Breakfast", "Morning Snack", "Lunch", "Afternoon Snack", "Dinner", "Evening Snack", "Pre-Workout", "Post-Workout"];
+
+async function loadNutritionLogs(clientId) {
+  try {
+    state.nLogs = await api("nutrition_logs?client_id=eq." + clientId + "&order=created_at.asc");
+  } catch (e) {
+    state.nLogs = [];
+    showToast("Could not load nutrition logs");
+  }
+}
+
+var NUTRITION_PROMPT_TEMPLATE = function (description) {
+  return "You are a precise sports nutrition expert. Analyze this meal and return ONLY a JSON object with no markdown, no preamble:\n\n"
+    + description
+    + "\n\nReturn this exact shape:\n"
+    + '{"meal_name":"short clean name","calories":number,"protein_g":number,"carbs_g":number,"fat_g":number,"fiber_g":number,"serving_note":"brief portion context","quality_score":1-10,"quality_notes":"1 sentence on nutritional quality for a fitness/body recomp goal"}'
+    + "\n\nBe accurate. Use standard food database values. Round to nearest whole number.";
+};
+
+async function analyzeMealText(description) {
+  var res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-6",
+      max_tokens: 1000,
+      messages: [{ role: "user", content: NUTRITION_PROMPT_TEMPLATE('Meal: "' + description + '"') }]
+    })
+  });
+  var data = await res.json();
+  var raw = (data.content && data.content[0] && data.content[0].text) || "{}";
+  return JSON.parse(raw.replace(/```json|```/g, "").trim());
+}
+
+async function analyzeMealPhoto(base64, mediaType, captionText) {
+  var instructions = "Look at this meal photo"
+    + (captionText ? ' (the person also noted: "' + captionText + '")' : "")
+    + " and estimate the nutrition facts. Use the plate, portion sizes, and visible ingredients to judge quantities as accurately as possible.";
+  var res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-6",
+      max_tokens: 1000,
+      messages: [{
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
+          { type: "text", text: NUTRITION_PROMPT_TEMPLATE(instructions) }
+        ]
+      }]
+    })
+  });
+  var data = await res.json();
+  var raw = (data.content && data.content[0] && data.content[0].text) || "{}";
+  return JSON.parse(raw.replace(/```json|```/g, "").trim());
+}
+
+function fileToBase64(file) {
+  return new Promise(function (resolve, reject) {
+    var r = new FileReader();
+    r.onload = function () { resolve(r.result.split(",")[1]); };
+    r.onerror = function () { reject(new Error("Could not read image")); };
+    r.readAsDataURL(file);
+  });
+}
+
+async function onNutritionPhotoSelected(file) {
+  if (!file) return;
+  try {
+    state.nPhotoBase64 = await fileToBase64(file);
+    state.nPhotoMediaType = file.type || "image/jpeg";
+    state.nAnalysisResult = null;
+    renderMain();
+  } catch (e) {
+    showToast("Could not read photo");
+  }
+}
+
+async function runMealAnalysis(mode) {
+  var input = document.getElementById("nMealInput");
+  var text = input ? input.value.trim() : "";
+  if (mode === "text" && !text) { showToast("Describe the meal first"); return; }
+  if (mode === "photo" && !state.nPhotoBase64) { showToast("Choose a photo first"); return; }
+  state.nAnalyzing = true;
+  state.nAnalysisResult = null;
+  renderMain();
+  try {
+    var result = mode === "photo"
+      ? await analyzeMealPhoto(state.nPhotoBase64, state.nPhotoMediaType, text)
+      : await analyzeMealText(text);
+    state.nAnalysisResult = result;
+  } catch (e) {
+    showToast("AI analysis
 showLoginOverlay();
 
 
