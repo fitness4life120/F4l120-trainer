@@ -448,6 +448,7 @@ function renderMain() {
   var el = document.getElementById("mainScroll");
   if(state.view === "clients") el.innerHTML = renderClients();
   else if(state.view === "log") el.innerHTML = renderLog();
+  else if(state.view === "nutrition") el.innerHTML = renderNutrition();
   else if(state.view === "plans") el.innerHTML = renderPlans();
   else if(state.view === "progress") el.innerHTML = renderProgress();
   else if(state.view === "stats") { el.innerHTML = renderStats(); attachStatsListeners(); }
