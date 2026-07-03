@@ -350,7 +350,7 @@ var state = {
 };
 
 function ini(n) { return n.trim().split(" ").map(function(w){return w[0]||"";}).join("").slice(0,2).toUpperCase(); }
-function tod() { return new Date().toISOString().slice(0,10); }
+function tod() { var d = new Date(); return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0"); }
 function fmt(d) { return new Date(d+"T12:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"}); }
 function genPin() { return Math.floor(1000+Math.random()*9000)+""; }
 function esc(s) { return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
@@ -1170,9 +1170,10 @@ async function loadClientData(id) {
       api("workout_logs?client_id=eq."+id+"&order=created_at.desc"),
       api("progress_logs?client_id=eq."+id+"&order=date.desc"),
       api("workout_plans?client_id=eq."+id+"&order=day.asc"),
-      api("dated_plans?client_id=eq."+id+"&order=date.asc")
+      api("dated_plans?client_id=eq."+id+"&order=date.asc"),
+      api("nutrition_logs?client_id=eq."+id+"&order=created_at.asc")
     ]);
-    state.cLogs = results[0]; state.cProg = results[1]; state.cPlans = results[2]; state.datedPlans = results[3]||[];
+    state.cLogs = results[0]; state.cProg = results[1]; state.cPlans = results[2]; state.datedPlans = results[3]||[]; state.nLogs = results[4]||[];
   } catch(e) { showToast("Error loading data"); }
 }
 
