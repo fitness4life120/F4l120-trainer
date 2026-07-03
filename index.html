@@ -1791,9 +1791,12 @@ async function analyzeMealText(description) {
 }
 
 async function analyzeMealPhoto(base64, mediaType, captionText) {
-  var instructions = "Look at this meal photo"
+  var instructions = "Look at this photo"
     + (captionText ? ' (the person also noted: "' + captionText + '")' : "")
-    + " and estimate the nutrition facts. Use the plate, portion sizes, and visible ingredients to judge quantities as accurately as possible.";
+    + ". First determine what kind of photo this is, then respond accordingly:\n"
+    + "- If it is a Nutrition Facts label or ingredients panel: read the exact printed values per serving (calories, protein, carbs, fat, fiber). If the note above specifies a quantity or number of servings eaten, scale the printed values accordingly; otherwise use the printed single-serving values exactly as shown — do not estimate or round differently than what's printed.\n"
+    + "- If it is a plate or photo of food (not a label): estimate the nutrition facts using the plate, portion sizes, and visible ingredients to judge quantities as accurately as possible.\n"
+    + "Use whichever approach actually fits what's in the photo.";
   var res = await fetch("https://poetic-blancmange-2af485.netlify.app/.netlify/functions/claude", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -2022,6 +2025,7 @@ function renderNutrition() {
     } else {
       html += '<label style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:130px;border:2px dashed var(--b1);border-radius:10px;cursor:pointer;color:var(--muted);background:var(--bg);margin-bottom:10px">'
         + '<div style="font-size:12px;font-weight:600">Tap to take or upload a photo</div>'
+        + '<div style="font-size:10px;color:var(--muted);margin-top:2px">of your meal or a nutrition label</div>'
         + '<input type="file" accept="image/*" capture="environment" style="display:none" onchange="onNutritionPhotoSelected(this.files[0])"/>'
         + '</label>';
     }
