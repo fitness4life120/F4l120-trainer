@@ -1902,6 +1902,16 @@ async function deleteNutritionLog(id) {
 
 function fmtDateISO(d) { return d.toISOString().slice(0, 10); }
 
+function getWeekDates(dateStr) {
+  var d = new Date(dateStr + "T12:00:00");
+  var dow = d.getDay();
+  var diffToMon = dow === 0 ? -6 : 1 - dow;
+  var monday = new Date(d); monday.setDate(d.getDate() + diffToMon);
+  var arr = [];
+  for (var i = 0; i < 7; i++) { var dd = new Date(monday); dd.setDate(monday.getDate() + i); arr.push(fmtDateISO(dd)); }
+  return arr;
+}
+
 function shiftNutritionDay(n) {
   var d = new Date(state.nDate);
   d.setDate(d.getDate() + n);
@@ -1934,6 +1944,30 @@ function renderNutrition() {
   var carbGoal = a.carbs || 200;
   var fatGoal = a.fat || 60;
   var calPct = Math.min((totals.calories / calGoal) * 100, 100);
+
+  // Weekly averages (Mon-Sun week containing state.nDate)
+  var weekDates = getWeekDates(state.nDate);
+  var weekLogsAll = state.nLogs.filter(function (l) { return weekDates.indexOf(l.date) > -1; });
+  var dayGroups = weekDates.map(function (d) { return weekLogsAll.filter(function (l) { return l.date === d; }); });
+  var loggedDayGroups = dayGroups.filter(function (g) { return g.length > 0; });
+  var wTotals = loggedDayGroups.reduce(function (acc, g) {
+    var dt = g.reduce(function (a, m) {
+      a.calories += (+m.calories || 0); a.protein_g += (+m.protein_g || 0);
+      a.carbs_g += (+m.carbs_g || 0); a.fat_g += (+m.fat_g || 0);
+      return a;
+    }, { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 });
+    acc.calories += dt.calories; acc.protein_g += dt.protein_g;
+    acc.carbs_g += dt.carbs_g; acc.fat_g += dt.fat_g;
+    return acc;
+  }, { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 });
+  var loggedCount = loggedDayGroups.length;
+  var avgCal = loggedCount ? Math.round(wTotals.calories / loggedCount) : 0;
+  var avgPro = loggedCount ? Math.round(wTotals.protein_g / loggedCount) : 0;
+  var avgCarb = loggedCount ? Math.round(wTotals.carbs_g / loggedCount) : 0;
+  var avgFat = loggedCount ? Math.round(wTotals.fat_g / loggedCount) : 0;
+  var wLabel = new Date(weekDates[0] + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })
+    + " – " + new Date(weekDates[6] + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
   var html = clientBanner();
   html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">'
     + '<button class="bg_" style="width:auto;margin:0;padding:9px 16px" onclick="shiftNutritionDay(-1)">Prev</button>'
@@ -1954,6 +1988,20 @@ function renderNutrition() {
     + macroBox("Fat", totals.fat_g, fatGoal, "#ef9a9a")
     + macroBox("Fiber", totals.fiber_g, null, "#a5d6a7")
     + '</div></div>';
+  html += '<div class="card">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="clbl" style="margin-bottom:0">This Week</div><span style="font-size:11px;color:var(--muted)">' + wLabel + '</span></div>'
+    + (loggedCount === 0
+      ? '<div style="color:var(--muted);font-size:12px;font-style:italic">No meals logged this week yet</div>'
+      : '<div style="text-align:center;margin-bottom:10px">'
+        + '<div style="font-family:Barlow Condensed;font-size:26px;font-weight:900;color:var(--teal2)">' + avgCal + '</div>'
+        + '<div style="font-size:11px;color:var(--muted)">avg kcal/day &middot; ' + loggedCount + ' of 7 days logged</div>'
+        + '</div>'
+        + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">'
+        + macroBox("Avg Protein", avgPro, null, "#4fc3f7")
+        + macroBox("Avg Carbs", avgCarb, null, "#ffd54f")
+        + macroBox("Avg Fat", avgFat, null, "#ef9a9a")
+        + '</div>')
+    + '</div>';
   html += '<div class="card">'
     + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
     + '<div class="clbl" style="margin-bottom:0">Log a Meal</div>'
