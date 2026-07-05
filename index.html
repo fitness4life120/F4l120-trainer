@@ -259,12 +259,21 @@ body{font-family:'Barlow',sans-serif;color:var(--txt)}
     <div class="f"><label>Exercise Name</label><input id="dp_exname" placeholder="e.g. Bench Press"/></div>
     <div class="fr3">
       <div class="f"><label>Sets</label><input type="number" id="dp_sets" placeholder="3" value="3"/></div>
-      <div class="f"><label>Reps</label><input id="dp_reps" placeholder="10" value="10"/></div>
+      <div class="f"><label id="dp_reps_label">Reps</label><input id="dp_reps" placeholder="10" value="10"/></div>
       <div class="f"><label>Muscle</label>
         <select id="dp_muscle">
           <option>Chest</option><option>Back</option><option>Shoulders</option><option>Biceps</option><option>Triceps</option><option>Legs</option><option>Glutes</option><option>Core</option><option>Cardio</option><option>Full Body</option>
         </select>
       </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div class="f"><label>Type</label>
+        <select id="dp_type" onchange="onDPTypeChange()">
+          <option value="reps">Reps</option>
+          <option value="time">Time (duration)</option>
+        </select>
+      </div>
+      <div class="f"><label>Rest</label><input id="dp_rest" placeholder="e.g. 60 sec"/></div>
     </div>
     <button class="bgold" onclick="addDPExercise()">+ Add Exercise</button>
     <div id="dpExList" style="margin-top:8px"></div>
@@ -681,16 +690,34 @@ function renderLog() {
 // PLANS VIEW
 var dpExercises = [];
 
+function onDPTypeChange() {
+  var type = document.getElementById("dp_type").value;
+  var lbl = document.getElementById("dp_reps_label");
+  var input = document.getElementById("dp_reps");
+  if(type === "time") {
+    lbl.textContent = "Duration";
+    input.placeholder = "e.g. 30 sec";
+    if(input.value === "10") input.value = "";
+  } else {
+    lbl.textContent = "Reps";
+    input.placeholder = "10";
+  }
+}
+
 function addDPExercise() {
   var name = document.getElementById("dp_exname") ? document.getElementById("dp_exname").value.trim() : "";
   if(!name) return;
+  var type = document.getElementById("dp_type") ? document.getElementById("dp_type").value : "reps";
   dpExercises.push({
     name: name,
     sets: +document.getElementById("dp_sets").value||3,
-    reps: document.getElementById("dp_reps").value||"10",
+    reps: document.getElementById("dp_reps").value||(type==="time"?"30 sec":"10"),
+    type: type,
+    rest: document.getElementById("dp_rest").value.trim() || "",
     muscle: document.getElementById("dp_muscle").value
   });
   document.getElementById("dp_exname").value = "";
+  document.getElementById("dp_rest").value = "";
   renderDPExList();
 }
 
@@ -712,9 +739,12 @@ function renderDPExList() {
   var el = document.getElementById("dpExList");
   if(!el) return;
   el.innerHTML = dpExercises.map(function(ex,i){
+    var isTime = ex.type === "time";
+    var repsLine = ex.sets+'×'+ex.reps+(isTime?'':'') + ' · '+esc(ex.muscle);
+    var restLine = ex.rest ? ' · Rest '+esc(ex.rest) : '';
     return '<div style="background:var(--bg);border:1px solid var(--b1);border-left:3px solid var(--gold);border-radius:7px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:8px">'
-      +'<div style="flex:1"><div style="font-size:13px;font-weight:600">'+esc(ex.name)+'</div>'
-      +'<div style="font-size:11px;color:var(--muted);margin-top:2px">'+ex.sets+'×'+ex.reps+' · '+esc(ex.muscle)+'</div></div>'
+      +'<div style="flex:1"><div style="font-size:13px;font-weight:600">'+esc(ex.name)+(isTime?' <span style="font-size:9px;color:var(--gold);background:var(--gold2);border-radius:3px;padding:1px 5px;margin-left:4px">TIME</span>':'')+'</div>'
+      +'<div style="font-size:11px;color:var(--muted);margin-top:2px">'+repsLine+restLine+'</div></div>'
       +'<button data-dpidx="'+i+'" class="dp-del-btn" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:3px 6px">✕</button>'
       +'</div>';
   }).join("");
@@ -857,12 +887,13 @@ function renderTrainerCal() {
       (existing.exercises||[]).forEach(function(ex){
         var pr = getExercisePR(state.cLogs, ex.name);
         var hasVid = !!state.exerciseVideos[ex.name];
+        var isTime = ex.type === "time";
         html += '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:7px;padding:9px 12px;margin-bottom:5px">';
         html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">';
-        html += '<span style="font-size:13px;font-weight:600">'+esc(ex.name)+'</span>';
+        html += '<span style="font-size:13px;font-weight:600">'+esc(ex.name)+(isTime?' <span style="font-size:9px;color:var(--gold);background:var(--gold2);border-radius:3px;padding:1px 5px;margin-left:4px">TIME</span>':'')+'</span>';
         html += '<span style="font-size:10px;color:'+(hasVid?"var(--green)":"var(--muted)")+'">'+(hasVid?"🎥":"")+'</span>';
         html += '</div>';
-        html += '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+ex.sets+'×'+ex.reps+(ex.muscle?' · '+esc(ex.muscle):'')+'</div>';
+        html += '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+ex.sets+'×'+ex.reps+(ex.muscle?' · '+esc(ex.muscle):'')+(ex.rest?' · Rest '+esc(ex.rest):'')+'</div>';
         if(pr) html += '<div style="font-size:10px;color:var(--gold);margin-top:2px;font-weight:700">🏆 PR: '+pr.weight+' lbs × '+pr.reps+'</div>';
         html += '</div>';
       });
