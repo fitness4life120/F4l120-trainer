@@ -1,4 +1,4 @@
-<!DOCTYPE html>  
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
@@ -1835,6 +1835,31 @@ state.msgThreadClientId = null;
 state.composeType = "individual";
 state.editingGroupId = null;
 
+var PUSH_FN_URL = "https://superb-eclair-9ca7e8.netlify.app/.netlify/functions/send-push";
+var CLIENT_APP_URL = "https://fitness4life120.github.io/F4l120-client/";
+
+async function sendPushToClients(clientIds, title, bodyText) {
+  if(!clientIds || !clientIds.length) return;
+  var subs = [];
+  try {
+    subs = await api("push_subscriptions?client_id=in.(" + clientIds.join(",") + ")");
+  } catch(e) { return; }
+  subs.forEach(function(sub) {
+    fetch(PUSH_FN_URL, {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({
+        subscription: { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+        title: title, body: bodyText, url: CLIENT_APP_URL
+      })
+    }).then(function(res) {
+      if(res.status === 404 || res.status === 410) {
+        api("push_subscriptions?id=eq."+sub.id, { method:"DELETE" }).catch(function(){});
+      }
+    }).catch(function(){ /* push is best-effort — never block the message itself */ });
+  });
+}
+
 function uuidv4() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
     var r = Math.random()*16|0, v = c=='x' ? r : (r&0x3|0x8);
@@ -1942,6 +1967,8 @@ async function sendComposeMessage() {
     showToast("Sent to "+targets.length+" client"+(targets.length!==1?"s":""));
     state.msgView = "inbox";
     renderMain();
+    var pushTitle = isBroadcast ? "New message from Coach Steve ("+label+")" : "New message from Coach Steve";
+    sendPushToClients(targets, pushTitle, body);
   } catch(e) { showToast("Could not send message"); }
 }
 
@@ -1953,6 +1980,7 @@ async function sendThreadReply() {
     var saved = await api("messages", { method:"POST", body: JSON.stringify({ thread_client_id: state.msgThreadClientId, sender:"trainer", body: body }) });
     if(saved && saved[0]) state.messages.push(saved[0]);
     renderMain();
+    sendPushToClients([state.msgThreadClientId], "New message from Coach Steve", body);
   } catch(e) { showToast("Could not send reply"); }
 }
 
