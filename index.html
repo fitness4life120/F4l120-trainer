@@ -1,4 +1,4 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
@@ -275,7 +275,10 @@ body{font-family:'Barlow',sans-serif;color:var(--txt)}
       </div>
       <div class="f"><label>Rest</label><input id="dp_rest" placeholder="e.g. 60 sec"/></div>
     </div>
-    <button class="bgold" onclick="addDPExercise()">+ Add Exercise</button>
+    <button class="bgold" id="dpAddBtn" onclick="addDPExercise()">+ Add Exercise</button>
+    <div id="dpCancelEditWrap" style="display:none;text-align:center;margin-top:6px">
+      <a href="javascript:void(0)" onclick="cancelDPEdit()" style="font-size:11px;color:var(--muted);text-decoration:underline">Cancel edit</a>
+    </div>
     <div id="dpExList" style="margin-top:8px"></div>
     <button class="bp" onclick="saveDatedPlan()" style="margin-top:12px">Save Plan</button>
     <button class="bg_" onclick="closeSheet('datedPlanSheet')">Cancel</button>
@@ -671,6 +674,9 @@ function renderLog() {
       html += '<div class="dh"><span class="dl">'+fmt(d)+'</span><div class="dline"></div><span class="dc">'+grp[d].length+'</span></div>';
       grp[d].forEach(function(e){
         var vol = (+e.sets||0)*(+e.reps||0)*(+e.weight||0);
+        var pr = getExercisePR(state.cLogs, e.exercise);
+        var vidUrl = state.exerciseVideos[e.exercise];
+        var vid = vidUrl ? getYouTubeId(vidUrl) : null;
         html += '<div class="exr"><div class="exr-top">'
           +'<span class="exr-name">'+esc(e.exercise)+'</span>'
           +(e.weight?'<span class="chip t">'+e.weight+' lbs</span>':'')
@@ -680,7 +686,10 @@ function renderLog() {
           +(e.muscle?'<span class="mtag">'+esc(e.muscle)+'</span>':'')
           +(e.sets?'<span class="chip">'+e.sets+'×'+(e.reps||"?")+'</span>':'')
           +(vol>0?'<span class="chip" style="font-size:9px;color:var(--muted)">'+vol.toLocaleString()+' vol</span>':'')
-          +'</div></div>';
+          +(vid?'<a href="https://www.youtube.com/watch?v='+vid+'" target="_blank" style="font-size:10px;color:var(--teal2);background:var(--teal3);border:1px solid var(--teal);border-radius:5px;padding:3px 8px;text-decoration:none">▶ Watch</a>':'')
+          +'</div>'
+          +(pr?'<div style="font-size:10px;color:var(--gold);margin-top:4px;font-weight:700">🏆 PR: '+pr.weight+' lbs × '+pr.reps+'</div>':'')
+          +'</div>';
       });
     });
   }
@@ -689,6 +698,7 @@ function renderLog() {
 
 // PLANS VIEW
 var dpExercises = [];
+var editingDPIndex = null;
 
 function onDPTypeChange() {
   var type = document.getElementById("dp_type").value;
@@ -704,20 +714,57 @@ function onDPTypeChange() {
   }
 }
 
+function resetDPForm() {
+  document.getElementById("dp_exname").value = "";
+  document.getElementById("dp_sets").value = "3";
+  document.getElementById("dp_reps").value = "10";
+  document.getElementById("dp_type").value = "reps";
+  document.getElementById("dp_rest").value = "";
+  document.getElementById("dp_muscle").selectedIndex = 0;
+  onDPTypeChange();
+  editingDPIndex = null;
+  document.getElementById("dpAddBtn").textContent = "+ Add Exercise";
+  document.getElementById("dpCancelEditWrap").style.display = "none";
+}
+
+function cancelDPEdit() {
+  resetDPForm();
+}
+
+function editDPExercise(idx) {
+  var ex = dpExercises[idx];
+  if(!ex) return;
+  document.getElementById("dp_exname").value = ex.name;
+  document.getElementById("dp_sets").value = ex.sets;
+  document.getElementById("dp_type").value = ex.type === "time" ? "time" : "reps";
+  onDPTypeChange();
+  document.getElementById("dp_reps").value = ex.reps;
+  document.getElementById("dp_rest").value = ex.rest || "";
+  var muscleSel = document.getElementById("dp_muscle");
+  for(var i=0;i<muscleSel.options.length;i++){ if(muscleSel.options[i].value === ex.muscle) muscleSel.selectedIndex = i; }
+  editingDPIndex = idx;
+  document.getElementById("dpAddBtn").textContent = "Update Exercise";
+  document.getElementById("dpCancelEditWrap").style.display = "block";
+}
+
 function addDPExercise() {
   var name = document.getElementById("dp_exname") ? document.getElementById("dp_exname").value.trim() : "";
   if(!name) return;
   var type = document.getElementById("dp_type") ? document.getElementById("dp_type").value : "reps";
-  dpExercises.push({
+  var newEx = {
     name: name,
     sets: +document.getElementById("dp_sets").value||3,
     reps: document.getElementById("dp_reps").value||(type==="time"?"30 sec":"10"),
     type: type,
     rest: document.getElementById("dp_rest").value.trim() || "",
     muscle: document.getElementById("dp_muscle").value
-  });
-  document.getElementById("dp_exname").value = "";
-  document.getElementById("dp_rest").value = "";
+  };
+  if(editingDPIndex !== null) {
+    dpExercises[editingDPIndex] = newEx;
+  } else {
+    dpExercises.push(newEx);
+  }
+  resetDPForm();
   renderDPExList();
 }
 
@@ -729,6 +776,7 @@ function openDatedPlan(existingId) {
   var dateLabel = document.getElementById("dp_dateLabel");
   if(dateLabel) dateLabel.textContent = state.selCalDate || "";
   dpExercises = existing ? (existing.exercises||[]).slice() : [];
+  resetDPForm();
   renderDPExList();
   openSheet("datedPlanSheet");
 }
@@ -742,17 +790,25 @@ function renderDPExList() {
     var isTime = ex.type === "time";
     var repsLine = ex.sets+'×'+ex.reps+(isTime?'':'') + ' · '+esc(ex.muscle);
     var restLine = ex.rest ? ' · Rest '+esc(ex.rest) : '';
-    return '<div style="background:var(--bg);border:1px solid var(--b1);border-left:3px solid var(--gold);border-radius:7px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:8px">'
+    return '<div data-dpeditidx="'+i+'" class="dp-edit-row" style="cursor:pointer;background:var(--bg);border:1px solid var(--b1);border-left:3px solid var(--gold);border-radius:7px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:8px">'
       +'<div style="flex:1"><div style="font-size:13px;font-weight:600">'+esc(ex.name)+(isTime?' <span style="font-size:9px;color:var(--gold);background:var(--gold2);border-radius:3px;padding:1px 5px;margin-left:4px">TIME</span>':'')+'</div>'
       +'<div style="font-size:11px;color:var(--muted);margin-top:2px">'+repsLine+restLine+'</div></div>'
       +'<button data-dpidx="'+i+'" class="dp-del-btn" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:3px 6px">✕</button>'
       +'</div>';
   }).join("");
-  // Attach delete listeners
+  // Tap a row to edit it
+  document.querySelectorAll(".dp-edit-row").forEach(function(row){
+    row.addEventListener("click", function(){
+      editDPExercise(+row.getAttribute("data-dpeditidx"));
+    });
+  });
+  // Attach delete listeners (stop propagation so it doesn't also trigger edit)
   document.querySelectorAll(".dp-del-btn").forEach(function(btn){
-    btn.addEventListener("click", function(){
+    btn.addEventListener("click", function(e){
+      e.stopPropagation();
       var idx = +btn.getAttribute("data-dpidx");
       dpExercises.splice(idx,1);
+      if(editingDPIndex === idx) resetDPForm();
       renderDPExList();
     });
   });
