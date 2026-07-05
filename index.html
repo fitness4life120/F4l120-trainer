@@ -285,6 +285,19 @@ body{font-family:'Barlow',sans-serif;color:var(--txt)}
   </div>
 </div>
 
+<div class="overlay" id="groupSheet">
+  <div class="sheet">
+    <div class="hdl"></div>
+    <div class="stitle" id="groupSheetTitle">New Group</div>
+    <div class="f"><label>Group Name</label><input id="grp_name" placeholder="e.g. Leg Day Crew"/></div>
+    <div class="sdiv"></div>
+    <div style="font-family:Barlow Condensed;font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;font-weight:700;margin-bottom:6px">Members</div>
+    <div id="grpClientList" style="max-height:280px;overflow-y:auto;margin-bottom:12px"></div>
+    <button class="bp" onclick="saveGroupSheet()">Save Group</button>
+    <button class="bg_" onclick="closeSheet('groupSheet')">Cancel</button>
+  </div>
+</div>
+
 <div class="overlay" id="logExSheet">
   <div class="sheet">
     <div class="hdl"></div>
@@ -418,21 +431,24 @@ function closeSheet(id) { var el = document.getElementById(id); if(el) el.classL
 function getActive() { return state.clients.find(function(c){ return c.id === state.activeId; }); }
 
 // ── TABS & NAV ──
-var TABS_BASE = ["clients","log","nutrition","plans","progress","stats"];
-var TABS_ADMIN = ["clients","log","nutrition","plans","progress","stats","trainers"];
-var NAV_BASE = [{id:"clients",i:"👥",l:"Clients"},{id:"log",i:"🏋️",l:"Log"},{id:"nutrition",i:"🍽️",l:"Food"},{id:"plans",i:"📋",l:"Plans"},{id:"progress",i:"📈",l:"Progress"},{id:"stats",i:"📊",l:"Stats"}];
-var NAV_ADMIN = [{id:"clients",i:"👥",l:"Clients"},{id:"log",i:"🏋️",l:"Log"},{id:"nutrition",i:"🍽️",l:"Food"},{id:"plans",i:"📋",l:"Plans"},{id:"progress",i:"📈",l:"Progress"},{id:"stats",i:"📊",l:"Stats"},{id:"trainers",i:"👨‍💼",l:"Team"}];
+var TABS_BASE = ["clients","log","nutrition","plans","messages","progress","stats"];
+var TABS_ADMIN = ["clients","log","nutrition","plans","messages","progress","stats","trainers"];
+var NAV_BASE = [{id:"clients",i:"👥",l:"Clients"},{id:"log",i:"🏋️",l:"Log"},{id:"nutrition",i:"🍽️",l:"Food"},{id:"plans",i:"📋",l:"Plans"},{id:"messages",i:"💬",l:"Messages"},{id:"progress",i:"📈",l:"Progress"},{id:"stats",i:"📊",l:"Stats"}];
+var NAV_ADMIN = [{id:"clients",i:"👥",l:"Clients"},{id:"log",i:"🏋️",l:"Log"},{id:"nutrition",i:"🍽️",l:"Food"},{id:"plans",i:"📋",l:"Plans"},{id:"messages",i:"💬",l:"Messages"},{id:"progress",i:"📈",l:"Progress"},{id:"stats",i:"📊",l:"Stats"},{id:"trainers",i:"👨‍💼",l:"Team"}];
 
 function renderNav() {
   var TABS = (state.isAdmin === true) ? TABS_ADMIN : TABS_BASE;
   var NAV = (state.isAdmin === true) ? NAV_ADMIN : NAV_BASE;
+  var totalUnread = (state.messages||[]).filter(function(m){ return m.sender === "client" && !m.read_at; }).length;
   var tb = document.getElementById("tabbar");
   tb.innerHTML = TABS.map(function(v){
-    return '<button class="tab'+(state.view===v?" active":"")+'" onclick="switchView(\''+v+'\')">'+(v[0].toUpperCase()+v.slice(1))+'</button>';
+    var badge = (v==="messages" && totalUnread>0) ? '<span style="display:inline-block;margin-left:4px;background:var(--red);color:#fff;font-size:9px;font-weight:800;border-radius:8px;padding:1px 5px">'+totalUnread+'</span>' : '';
+    return '<button class="tab'+(state.view===v?" active":"")+'" onclick="switchView(\''+v+'\')">'+(v[0].toUpperCase()+v.slice(1))+badge+'</button>';
   }).join("");
   var bn = document.getElementById("bnav");
   bn.innerHTML = NAV.map(function(n){
-    return '<button class="bb'+(state.view===n.id?" active":"")+'" onclick="switchView(\''+n.id+'\')">'+'<span class="bi">'+n.i+'</span>'+n.l+'</button>';
+    var badge = (n.id==="messages" && totalUnread>0) ? '<span style="position:absolute;top:2px;right:calc(50% - 20px);background:var(--red);color:#fff;font-size:9px;font-weight:800;border-radius:8px;padding:1px 5px">'+totalUnread+'</span>' : '';
+    return '<button onclick="switchView(\''+n.id+'\')" class="bb'+(state.view===n.id?" active":"")+'" style="position:relative">'+badge+'<span class="bi">'+n.i+'</span>'+n.l+'</button>';
   }).join("");
   document.getElementById("switchBtn").style.display = (state.view !== "clients" && getActive()) ? "flex" : "none";
   document.getElementById("fab").style.display = (state.view === "clients" || (state.view === "log" && getActive())) ? "flex" : "none";
@@ -441,7 +457,7 @@ function renderNav() {
 }
 
 function switchView(v) {
-  if(v !== "clients" && v !== "trainers" && !getActive()) return;
+  if(v !== "clients" && v !== "trainers" && v !== "messages" && !getActive()) return;
   state.view = v;
   renderNav();
   renderMain();
@@ -462,6 +478,7 @@ function renderMain() {
   else if(state.view === "log") el.innerHTML = renderLog();
   else if(state.view === "nutrition") el.innerHTML = renderNutrition();
   else if(state.view === "plans") el.innerHTML = renderPlans();
+  else if(state.view === "messages") { el.innerHTML = renderMessages(); attachMessagesListeners(); }
   else if(state.view === "progress") el.innerHTML = renderProgress();
   else if(state.view === "stats") { el.innerHTML = renderStats(); attachStatsListeners(); }
   else if(state.view === "trainers") { el.innerHTML = renderTrainers(); attachTrainerListeners(); }
@@ -1808,6 +1825,326 @@ async function loadCustomExercises() {
   } catch(e) { /* non-fatal — falls back to the base 549-exercise list */ }
 }
 loadCustomExercises();
+
+// ── MESSAGING MODULE ──
+state.messages = [];
+state.groups = [];
+state.groupMembers = [];
+state.msgView = "inbox";
+state.msgThreadClientId = null;
+state.composeType = "individual";
+state.editingGroupId = null;
+
+function uuidv4() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    var r = Math.random()*16|0, v = c=='x' ? r : (r&0x3|0x8);
+    return v.toString(16);
+  });
+}
+
+function timeAgoShort(iso) {
+  var d = new Date(iso);
+  var mins = Math.floor((new Date() - d) / 60000);
+  if(mins < 1) return "now";
+  if(mins < 60) return mins+"m";
+  var hrs = Math.floor(mins/60);
+  if(hrs < 24) return hrs+"h";
+  var days = Math.floor(hrs/24);
+  if(days < 7) return days+"d";
+  return d.toLocaleDateString("en-US", {month:"short", day:"numeric"});
+}
+
+async function loadMessagingData() {
+  try {
+    var results = await Promise.all([
+      api("messages?order=created_at.desc&limit=3000"),
+      api("client_groups?order=name.asc"),
+      api("client_group_members?select=group_id,client_id")
+    ]);
+    state.messages = results[0] || [];
+    state.groups = results[1] || [];
+    state.groupMembers = results[2] || [];
+    if(state.view === "messages") renderMain(); else renderNav();
+  } catch(e) { /* non-fatal */ }
+}
+
+function getGroupMembers(groupId) {
+  return state.groupMembers.filter(function(m){ return m.group_id === groupId; }).map(function(m){ return m.client_id; });
+}
+
+function getThreadsList() {
+  var byClient = {};
+  state.messages.forEach(function(m){
+    if(!byClient[m.thread_client_id] || new Date(m.created_at) > new Date(byClient[m.thread_client_id].created_at)) {
+      byClient[m.thread_client_id] = m;
+    }
+  });
+  var threads = Object.keys(byClient).map(function(cid){
+    var client = state.clients.find(function(c){ return c.id === cid; });
+    var unread = state.messages.filter(function(m){ return m.thread_client_id === cid && m.sender === "client" && !m.read_at; }).length;
+    return { clientId: cid, clientName: client ? client.name : "Former/Unknown Client", lastMsg: byClient[cid], unread: unread };
+  });
+  threads.sort(function(a,b){ return new Date(b.lastMsg.created_at) - new Date(a.lastMsg.created_at); });
+  return threads;
+}
+
+function setMsgView(v) { state.msgView = v; renderMain(); }
+
+function openThread(clientId) {
+  state.msgThreadClientId = clientId;
+  state.msgView = "thread";
+  markThreadReadByTrainer(clientId);
+  renderMain();
+}
+
+async function markThreadReadByTrainer(clientId) {
+  var unread = state.messages.filter(function(m){ return m.thread_client_id === clientId && m.sender === "client" && !m.read_at; });
+  if(!unread.length) return;
+  var now = new Date().toISOString();
+  unread.forEach(function(m){ m.read_at = now; });
+  try {
+    await api("messages?thread_client_id=eq."+clientId+"&sender=eq.client&read_at=is.null", { method:"PATCH", body: JSON.stringify({read_at: now}) });
+  } catch(e) {}
+  renderNav();
+}
+
+function setComposeType(t) { state.composeType = t; renderMain(); }
+
+async function sendComposeMessage() {
+  var bodyEl = document.getElementById("composeBody");
+  var body = bodyEl ? bodyEl.value.trim() : "";
+  if(!body) { showToast("Write a message first"); return; }
+  var targets = [];
+  var label = null;
+  if(state.composeType === "individual") {
+    var cid = document.getElementById("composeClient").value;
+    if(!cid) { showToast("Pick a client"); return; }
+    targets = [cid];
+  } else if(state.composeType === "all") {
+    targets = state.clients.map(function(c){ return c.id; });
+    label = "All Clients";
+  } else if(state.composeType === "group") {
+    var gid = document.getElementById("composeGroup").value;
+    if(!gid) { showToast("Pick a group"); return; }
+    targets = getGroupMembers(gid);
+    var g = state.groups.find(function(g){ return g.id === gid; });
+    label = g ? g.name : "Group";
+  }
+  if(!targets.length) { showToast("No recipients found"); return; }
+  var isBroadcast = targets.length > 1;
+  var broadcastId = isBroadcast ? uuidv4() : null;
+  var rows = targets.map(function(cid){
+    return { thread_client_id: cid, sender: "trainer", body: body, broadcast_id: broadcastId, broadcast_label: isBroadcast ? label : null };
+  });
+  try {
+    var saved = await api("messages", { method:"POST", body: JSON.stringify(rows) });
+    state.messages = state.messages.concat(saved||[]);
+    showToast("Sent to "+targets.length+" client"+(targets.length!==1?"s":""));
+    state.msgView = "inbox";
+    renderMain();
+  } catch(e) { showToast("Could not send message"); }
+}
+
+async function sendThreadReply() {
+  var input = document.getElementById("threadReplyBody");
+  var body = input ? input.value.trim() : "";
+  if(!body || !state.msgThreadClientId) return;
+  try {
+    var saved = await api("messages", { method:"POST", body: JSON.stringify({ thread_client_id: state.msgThreadClientId, sender:"trainer", body: body }) });
+    if(saved && saved[0]) state.messages.push(saved[0]);
+    renderMain();
+  } catch(e) { showToast("Could not send reply"); }
+}
+
+function backToInbox() { state.msgView = "inbox"; state.msgThreadClientId = null; renderMain(); }
+
+function openGroupSheet(groupId) {
+  state.editingGroupId = groupId || null;
+  var group = groupId ? state.groups.find(function(g){ return g.id===groupId; }) : null;
+  document.getElementById("grp_name").value = group ? group.name : "";
+  var members = groupId ? getGroupMembers(groupId) : [];
+  var list = document.getElementById("grpClientList");
+  list.innerHTML = state.clients.map(function(c){
+    var checked = members.indexOf(c.id) > -1 ? "checked" : "";
+    return '<label style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--b1);font-size:13px;cursor:pointer"><input type="checkbox" class="grp-client-cb" value="'+c.id+'" '+checked+' style="width:16px;height:16px"/>'+esc(c.name)+'</label>';
+  }).join("");
+  document.getElementById("groupSheetTitle").textContent = groupId ? "Edit Group" : "New Group";
+  openSheet("groupSheet");
+}
+
+async function saveGroupSheet() {
+  var name = document.getElementById("grp_name").value.trim();
+  if(!name) { showToast("Name the group"); return; }
+  var checked = Array.prototype.slice.call(document.querySelectorAll(".grp-client-cb:checked")).map(function(cb){ return cb.value; });
+  try {
+    var groupId = state.editingGroupId;
+    if(groupId) {
+      await api("client_groups?id=eq."+groupId, { method:"PATCH", body: JSON.stringify({name:name}) });
+      var g = state.groups.find(function(g){ return g.id===groupId; });
+      if(g) g.name = name;
+    } else {
+      var saved = await api("client_groups", { method:"POST", body: JSON.stringify({name:name}) });
+      groupId = saved[0].id;
+      state.groups.push(saved[0]);
+    }
+    var existing = getGroupMembers(groupId);
+    var toAdd = checked.filter(function(id){ return existing.indexOf(id) === -1; });
+    var toRemove = existing.filter(function(id){ return checked.indexOf(id) === -1; });
+    if(toAdd.length) {
+      var added = await api("client_group_members", { method:"POST", body: JSON.stringify(toAdd.map(function(cid){ return {group_id:groupId, client_id:cid}; })) });
+      state.groupMembers = state.groupMembers.concat(added||[]);
+    }
+    for(var i=0;i<toRemove.length;i++){
+      await api("client_group_members?group_id=eq."+groupId+"&client_id=eq."+toRemove[i], { method:"DELETE" });
+    }
+    if(toRemove.length) state.groupMembers = state.groupMembers.filter(function(m){ return !(m.group_id===groupId && toRemove.indexOf(m.client_id) > -1); });
+    closeSheet("groupSheet");
+    showToast("Group saved ✓");
+    renderMain();
+  } catch(e) { showToast("Could not save group"); }
+}
+
+async function deleteGroupById(groupId) {
+  if(!confirm("Delete this group? This won't delete any messages already sent.")) return;
+  try {
+    await api("client_groups?id=eq."+groupId, { method:"DELETE" });
+    state.groups = state.groups.filter(function(g){ return g.id !== groupId; });
+    state.groupMembers = state.groupMembers.filter(function(m){ return m.group_id !== groupId; });
+    renderMain();
+  } catch(e) { showToast("Could not delete group"); }
+}
+
+function attachMessagesListeners() {
+  var replyInput = document.getElementById("threadReplyBody");
+  if(replyInput) {
+    replyInput.addEventListener("keydown", function(e){
+      if(e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendThreadReply(); }
+    });
+  }
+}
+
+function renderMessages() {
+  if(state.msgView === "thread") return renderMsgThread();
+  if(state.msgView === "compose") return renderMsgCompose();
+  if(state.msgView === "groups") return renderMsgGroups();
+  return renderMsgInbox();
+}
+
+function renderMsgInbox() {
+  var threads = getThreadsList();
+  var html = '<div style="display:flex;gap:8px;margin-bottom:14px">';
+  html += '<button class="bp" style="flex:1;margin:0" onclick="setMsgView(\'compose\')">+ New Message</button>';
+  html += '<button class="bg_" style="width:auto;margin:0;padding:0 16px" onclick="setMsgView(\'groups\')">Groups</button>';
+  html += '</div>';
+  if(!threads.length) {
+    html += '<div class="empty"><span style="font-size:36px;display:block;margin-bottom:10px">💬</span>No messages yet</div>';
+    return html;
+  }
+  threads.forEach(function(t){
+    var preview = t.lastMsg.body.length > 60 ? t.lastMsg.body.slice(0,60)+"…" : t.lastMsg.body;
+    var fromLabel = t.lastMsg.sender === "trainer" ? "You: " : "";
+    html += '<div onclick="openThread(\''+t.clientId+'\')" style="background:var(--s1);border:1px solid var(--b1);border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px">';
+    html += '<div style="flex:1;min-width:0">';
+    html += '<div style="display:flex;align-items:center;gap:6px"><span style="font-size:14px;font-weight:700">'+esc(t.clientName)+'</span>'+(t.lastMsg.broadcast_label?'<span style="font-size:9px;color:var(--gold);background:var(--gold2);border-radius:3px;padding:1px 5px">'+esc(t.lastMsg.broadcast_label)+'</span>':'')+'</div>';
+    html += '<div style="font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+fromLabel+esc(preview)+'</div>';
+    html += '</div>';
+    html += '<div style="text-align:right;flex-shrink:0">';
+    html += '<div style="font-size:10px;color:var(--muted)">'+timeAgoShort(t.lastMsg.created_at)+'</div>';
+    if(t.unread > 0) html += '<div style="margin-top:4px;background:var(--teal);color:#fff;font-size:10px;font-weight:700;border-radius:10px;padding:2px 7px;display:inline-block">'+t.unread+'</div>';
+    html += '</div>';
+    html += '</div>';
+  });
+  return html;
+}
+
+function renderMsgThread() {
+  var cid = state.msgThreadClientId;
+  var client = state.clients.find(function(c){ return c.id === cid; });
+  var msgs = state.messages.filter(function(m){ return m.thread_client_id === cid; }).slice().sort(function(a,b){ return new Date(a.created_at)-new Date(b.created_at); });
+  var html = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">';
+  html += '<button onclick="backToInbox()" style="background:var(--s1);border:1px solid var(--b1);color:var(--txt);border-radius:8px;padding:8px 12px;cursor:pointer;font-size:14px">←</button>';
+  html += '<div style="font-size:15px;font-weight:700">'+esc(client?client.name:"Unknown Client")+'</div>';
+  html += '</div>';
+  html += '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">';
+  msgs.forEach(function(m){
+    var isTrainer = m.sender === "trainer";
+    html += '<div style="align-self:'+(isTrainer?"flex-end":"flex-start")+';max-width:80%">';
+    if(m.broadcast_label) html += '<div style="font-size:9px;color:var(--gold);margin-bottom:2px;text-align:'+(isTrainer?"right":"left")+'">Sent to: '+esc(m.broadcast_label)+'</div>';
+    html += '<div style="background:'+(isTrainer?"linear-gradient(135deg,#186476,var(--teal))":"var(--s1)")+';color:'+(isTrainer?"#fff":"var(--txt)")+';border:1px solid '+(isTrainer?"transparent":"var(--b1)")+';border-radius:12px;padding:9px 13px;font-size:13px;line-height:1.4">'+esc(m.body).replace(/\n/g,"<br>")+'</div>';
+    html += '<div style="font-size:9px;color:var(--muted);margin-top:3px;text-align:'+(isTrainer?"right":"left")+'">'+timeAgoShort(m.created_at)+'</div>';
+    html += '</div>';
+  });
+  html += '</div>';
+  html += '<div style="position:sticky;bottom:0;background:var(--bg);padding-top:8px;display:flex;gap:8px">';
+  html += '<textarea id="threadReplyBody" placeholder="Type a message…" style="flex:1;background:var(--s1);border:1.5px solid var(--b1);border-radius:8px;padding:11px;color:var(--txt);font-family:Barlow,sans-serif;font-size:14px;outline:none;resize:none;min-height:44px;max-height:100px"></textarea>';
+  html += '<button onclick="sendThreadReply()" style="background:linear-gradient(135deg,#186476,var(--teal));color:#fff;border:none;border-radius:8px;padding:0 18px;font-weight:700;cursor:pointer">Send</button>';
+  html += '</div>';
+  return html;
+}
+
+function renderMsgCompose() {
+  var html = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">';
+  html += '<button onclick="backToInbox()" style="background:var(--s1);border:1px solid var(--b1);color:var(--txt);border-radius:8px;padding:8px 12px;cursor:pointer;font-size:14px">←</button>';
+  html += '<div style="font-size:15px;font-weight:700">New Message</div>';
+  html += '</div>';
+  html += '<div class="card">';
+  html += '<div class="clbl">Send To</div>';
+  html += '<div style="display:flex;gap:6px;margin-bottom:12px">';
+  ["individual","all","group"].forEach(function(t){
+    var lbl = t==="individual"?"Individual":t==="all"?"All Clients":"Group";
+    var active = state.composeType === t;
+    html += '<button onclick="setComposeType(\''+t+'\')" style="flex:1;padding:9px 4px;border-radius:8px;border:1px solid '+(active?"var(--teal)":"var(--b1)")+';background:'+(active?"var(--teal3)":"var(--s1)")+';color:'+(active?"var(--teal2)":"var(--muted)")+';font-size:12px;font-weight:700;cursor:pointer">'+lbl+'</button>';
+  });
+  html += '</div>';
+  if(state.composeType === "individual") {
+    html += '<select id="composeClient" style="background:var(--bg);border:1.5px solid var(--b1);border-radius:8px;padding:11px;color:var(--txt);font-family:Barlow,sans-serif;font-size:14px;outline:none;width:100%;margin-bottom:12px">';
+    html += '<option value="">Select a client…</option>';
+    state.clients.slice().sort(function(a,b){return a.name.localeCompare(b.name);}).forEach(function(c){ html += '<option value="'+c.id+'">'+esc(c.name)+'</option>'; });
+    html += '</select>';
+  } else if(state.composeType === "group") {
+    if(!state.groups.length) {
+      html += '<div style="font-size:12px;color:var(--muted);font-style:italic;margin-bottom:12px">No groups yet — create one from the Groups screen first</div>';
+    } else {
+      html += '<select id="composeGroup" style="background:var(--bg);border:1.5px solid var(--b1);border-radius:8px;padding:11px;color:var(--txt);font-family:Barlow,sans-serif;font-size:14px;outline:none;width:100%;margin-bottom:12px">';
+      html += '<option value="">Select a group…</option>';
+      state.groups.forEach(function(g){ html += '<option value="'+g.id+'">'+esc(g.name)+' ('+getGroupMembers(g.id).length+')</option>'; });
+      html += '</select>';
+    }
+  } else {
+    html += '<div style="font-size:12px;color:var(--muted);margin-bottom:12px">This will send to all '+state.clients.length+' clients.</div>';
+  }
+  html += '<div class="clbl">Message</div>';
+  html += '<textarea id="composeBody" placeholder="Write your message…" style="background:var(--bg);border:1.5px solid var(--b1);border-radius:8px;padding:11px;color:var(--txt);font-family:Barlow,sans-serif;font-size:14px;outline:none;width:100%;min-height:100px;resize:vertical;margin-bottom:12px"></textarea>';
+  html += '<button class="bp" onclick="sendComposeMessage()">Send Message</button>';
+  html += '</div>';
+  return html;
+}
+
+function renderMsgGroups() {
+  var html = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">';
+  html += '<div style="display:flex;align-items:center;gap:10px">';
+  html += '<button onclick="backToInbox()" style="background:var(--s1);border:1px solid var(--b1);color:var(--txt);border-radius:8px;padding:8px 12px;cursor:pointer;font-size:14px">←</button>';
+  html += '<div style="font-size:15px;font-weight:700">Groups</div>';
+  html += '</div>';
+  html += '<button class="bgold" style="width:auto;margin:0;padding:9px 14px" onclick="openGroupSheet(null)">+ New</button>';
+  html += '</div>';
+  if(!state.groups.length) {
+    html += '<div class="empty"><span style="font-size:36px;display:block;margin-bottom:10px">👥</span>No groups yet</div>';
+    return html;
+  }
+  state.groups.forEach(function(g){
+    var count = getGroupMembers(g.id).length;
+    html += '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:10px;padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">';
+    html += '<div><div style="font-size:14px;font-weight:700">'+esc(g.name)+'</div><div style="font-size:11px;color:var(--muted);margin-top:2px">'+count+' client'+(count!==1?"s":"")+'</div></div>';
+    html += '<div style="display:flex;gap:6px">';
+    html += '<button onclick="openGroupSheet(\''+g.id+'\')" style="background:var(--teal3);border:1px solid var(--teal);color:var(--teal2);border-radius:6px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer">Edit</button>';
+    html += '<button onclick="deleteGroupById(\''+g.id+'\')" style="background:rgba(224,82,82,0.1);border:1px solid rgba(224,82,82,0.25);color:var(--red);border-radius:6px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer">✕</button>';
+    html += '</div></div>';
+  });
+  return html;
+}
+
+loadMessagingData();
 
 // ── LOGIN SYSTEM ──
 var pinValue = "";
