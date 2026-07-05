@@ -1843,7 +1843,10 @@ async function sendPushToClients(clientIds, title, bodyText) {
   var subs = [];
   try {
     subs = await api("push_subscriptions?client_id=in.(" + clientIds.join(",") + ")");
-  } catch(e) { return; }
+  } catch(e) { showToast("Push: could not load subscriptions"); return; }
+  if(!subs.length) { showToast("Push: no devices subscribed for this recipient"); return; }
+  var results = { ok: 0, fail: 0, lastError: "" };
+  var pending = subs.length;
   subs.forEach(function(sub) {
     fetch(PUSH_FN_URL, {
       method: "POST",
@@ -1853,10 +1856,26 @@ async function sendPushToClients(clientIds, title, bodyText) {
         title: title, body: bodyText, url: CLIENT_APP_URL
       })
     }).then(function(res) {
-      if(res.status === 404 || res.status === 410) {
-        api("push_subscriptions?id=eq."+sub.id, { method:"DELETE" }).catch(function(){});
+      return res.text().then(function(txt){ return {res:res, txt:txt}; });
+    }).then(function(r) {
+      if(r.res.ok) { results.ok++; }
+      else {
+        results.fail++;
+        results.lastError = "HTTP " + r.res.status + ": " + r.txt.slice(0,120);
+        if(r.res.status === 404 || r.res.status === 410) {
+          api("push_subscriptions?id=eq."+sub.id, { method:"DELETE" }).catch(function(){});
+        }
       }
-    }).catch(function(){ /* push is best-effort — never block the message itself */ });
+    }).catch(function(e) {
+      results.fail++;
+      results.lastError = "Network error: " + e.message;
+    }).then(function() {
+      pending--;
+      if(pending === 0) {
+        if(results.fail === 0) showToast("Push sent ✓ ("+results.ok+" device"+(results.ok!==1?"s":"")+")");
+        else showToast("Push: "+results.ok+" sent, "+results.fail+" failed — "+results.lastError);
+      }
+    });
   });
 }
 
