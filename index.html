@@ -275,6 +275,11 @@ body{font-family:'Barlow',sans-serif;color:var(--txt)}
       </div>
       <div class="f"><label>Rest</label><input id="dp_rest" placeholder="e.g. 60 sec"/></div>
     </div>
+    <div class="f"><label>Superset / Circuit Group</label>
+      <select id="dp_group" onchange="onDPGroupChange()">
+        <option value="">— None (standalone) —</option>
+      </select>
+    </div>
     <button class="bgold" id="dpAddBtn" onclick="addDPExercise()">+ Add Exercise</button>
     <div id="dpCancelEditWrap" style="display:none;text-align:center;margin-top:6px">
       <a href="javascript:void(0)" onclick="cancelDPEdit()" style="font-size:11px;color:var(--muted);text-decoration:underline">Cancel edit</a>
@@ -733,6 +738,43 @@ function renderLog() {
 var dpExercises = [];
 var editingDPIndex = null;
 
+function nextGroupLetter() {
+  var used = {};
+  dpExercises.forEach(function(e){ if(e.group) used[e.group] = true; });
+  var letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  for(var i=0;i<letters.length;i++){ if(!used[letters[i]]) return letters[i]; }
+  return "Z2";
+}
+
+function refreshDPGroupOptions() {
+  var sel = document.getElementById("dp_group");
+  if(!sel) return;
+  var currentVal = sel.value;
+  var used = Array.from(new Set(dpExercises.map(function(e){ return e.group; }).filter(Boolean))).sort();
+  var html = '<option value="">— None (standalone) —</option>';
+  used.forEach(function(g){
+    var count = dpExercises.filter(function(e){ return e.group===g; }).length;
+    var label = (count>=3 ? "Circuit " : "Superset ") + g;
+    html += '<option value="'+g+'">'+label+' ('+count+' exercise'+(count!==1?"s":"")+')</option>';
+  });
+  html += '<option value="__new__">+ New Group</option>';
+  sel.innerHTML = html;
+  if(currentVal && sel.querySelector('option[value="'+currentVal+'"]')) sel.value = currentVal;
+}
+
+function onDPGroupChange() {
+  var sel = document.getElementById("dp_group");
+  if(sel.value === "__new__") {
+    var newLetter = nextGroupLetter();
+    refreshDPGroupOptions();
+    var opt = document.createElement("option");
+    opt.value = newLetter;
+    opt.textContent = "Superset "+newLetter+" (new)";
+    sel.insertBefore(opt, sel.querySelector('option[value="__new__"]'));
+    sel.value = newLetter;
+  }
+}
+
 function onDPTypeChange() {
   var type = document.getElementById("dp_type").value;
   var lbl = document.getElementById("dp_reps_label");
@@ -755,6 +797,8 @@ function resetDPForm() {
   document.getElementById("dp_rest").value = "";
   document.getElementById("dp_muscle").selectedIndex = 0;
   onDPTypeChange();
+  refreshDPGroupOptions();
+  document.getElementById("dp_group").value = "";
   editingDPIndex = null;
   document.getElementById("dpAddBtn").textContent = "+ Add Exercise";
   document.getElementById("dpCancelEditWrap").style.display = "none";
@@ -775,6 +819,8 @@ function editDPExercise(idx) {
   document.getElementById("dp_rest").value = ex.rest || "";
   var muscleSel = document.getElementById("dp_muscle");
   for(var i=0;i<muscleSel.options.length;i++){ if(muscleSel.options[i].value === ex.muscle) muscleSel.selectedIndex = i; }
+  refreshDPGroupOptions();
+  document.getElementById("dp_group").value = ex.group || "";
   editingDPIndex = idx;
   document.getElementById("dpAddBtn").textContent = "Update Exercise";
   document.getElementById("dpCancelEditWrap").style.display = "block";
@@ -784,13 +830,16 @@ function addDPExercise() {
   var name = document.getElementById("dp_exname") ? document.getElementById("dp_exname").value.trim() : "";
   if(!name) return;
   var type = document.getElementById("dp_type") ? document.getElementById("dp_type").value : "reps";
+  var groupVal = document.getElementById("dp_group") ? document.getElementById("dp_group").value : "";
+  if(groupVal === "__new__") groupVal = "";
   var newEx = {
     name: name,
     sets: +document.getElementById("dp_sets").value||3,
     reps: document.getElementById("dp_reps").value||(type==="time"?"30 sec":"10"),
     type: type,
     rest: document.getElementById("dp_rest").value.trim() || "",
-    muscle: document.getElementById("dp_muscle").value
+    muscle: document.getElementById("dp_muscle").value,
+    group: groupVal || null
   };
   if(editingDPIndex !== null) {
     dpExercises[editingDPIndex] = newEx;
@@ -819,16 +868,22 @@ function editDatedPlan(id) { openDatedPlan(id); }
 function renderDPExList() {
   var el = document.getElementById("dpExList");
   if(!el) return;
+  var groupCounts = {};
+  dpExercises.forEach(function(e){ if(e.group) groupCounts[e.group] = (groupCounts[e.group]||0)+1; });
   el.innerHTML = dpExercises.map(function(ex,i){
     var isTime = ex.type === "time";
     var repsLine = ex.sets+'×'+ex.reps+(isTime?'':'') + ' · '+esc(ex.muscle);
     var restLine = ex.rest ? ' · Rest '+esc(ex.rest) : '';
-    return '<div data-dpeditidx="'+i+'" class="dp-edit-row" style="cursor:pointer;background:var(--bg);border:1px solid var(--b1);border-left:3px solid var(--gold);border-radius:7px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:8px">'
-      +'<div style="flex:1"><div style="font-size:13px;font-weight:600">'+esc(ex.name)+(isTime?' <span style="font-size:9px;color:var(--gold);background:var(--gold2);border-radius:3px;padding:1px 5px;margin-left:4px">TIME</span>':'')+'</div>'
+    var hasGroup = !!ex.group;
+    var groupLabel = hasGroup ? ((groupCounts[ex.group]>=3?"Circuit ":"Superset ")+ex.group) : "";
+    var borderColor = hasGroup ? "var(--teal)" : "var(--gold)";
+    return '<div data-dpeditidx="'+i+'" class="dp-edit-row" style="cursor:pointer;background:var(--bg);border:1px solid var(--b1);border-left:3px solid '+borderColor+';border-radius:7px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:8px">'
+      +'<div style="flex:1"><div style="font-size:13px;font-weight:600">'+esc(ex.name)+(isTime?' <span style="font-size:9px;color:var(--gold);background:var(--gold2);border-radius:3px;padding:1px 5px;margin-left:4px">TIME</span>':'')+(hasGroup?' <span style="font-size:9px;color:var(--teal2);background:var(--teal3);border-radius:3px;padding:1px 5px;margin-left:4px">'+groupLabel+'</span>':'')+'</div>'
       +'<div style="font-size:11px;color:var(--muted);margin-top:2px">'+repsLine+restLine+'</div></div>'
       +'<button data-dpidx="'+i+'" class="dp-del-btn" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:3px 6px">✕</button>'
       +'</div>';
   }).join("");
+  refreshDPGroupOptions();
   // Tap a row to edit it
   document.querySelectorAll(".dp-edit-row").forEach(function(row){
     row.addEventListener("click", function(){
@@ -916,6 +971,40 @@ function updateCalSelArea(d) {
   if(delBtn) delBtn.addEventListener("click", function(){ deleteDatedPlan(delBtn.getAttribute("data-planid")); });
 }
 
+function groupExercisesByGroup(exercises) {
+  var result = [];
+  var seen = {};
+  exercises.forEach(function(ex){
+    if(!ex.group) { result.push({type:"single", ex:ex}); return; }
+    if(seen[ex.group]) {
+      var entry = result.filter(function(r){ return r.type==="group" && r.groupId===ex.group; })[0];
+      if(entry) entry.exercises.push(ex);
+      return;
+    }
+    seen[ex.group] = true;
+    result.push({type:"group", groupId:ex.group, exercises:[ex]});
+  });
+  result.forEach(function(r){
+    if(r.type==="group") r.label = (r.exercises.length>=3?"Circuit ":"Superset ")+r.groupId;
+  });
+  return result;
+}
+
+function renderExCardTrainer(ex) {
+  var pr = getExercisePR(state.cLogs, ex.name);
+  var hasVid = !!state.exerciseVideos[ex.name];
+  var isTime = ex.type === "time";
+  var html = '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:7px;padding:9px 12px;margin-bottom:5px">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">';
+  html += '<span style="font-size:13px;font-weight:600">'+esc(ex.name)+(isTime?' <span style="font-size:9px;color:var(--gold);background:var(--gold2);border-radius:3px;padding:1px 5px;margin-left:4px">TIME</span>':'')+'</span>';
+  html += '<span style="font-size:10px;color:'+(hasVid?"var(--green)":"var(--muted)")+'">'+(hasVid?"🎥":"")+'</span>';
+  html += '</div>';
+  html += '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+ex.sets+'×'+ex.reps+(ex.muscle?' · '+esc(ex.muscle):'')+(ex.rest?' · Rest '+esc(ex.rest):'')+'</div>';
+  if(pr) html += '<div style="font-size:10px;color:var(--gold);margin-top:2px;font-weight:700">🏆 PR: '+pr.weight+' lbs × '+pr.reps+'</div>';
+  html += '</div>';
+  return html;
+}
+
 function renderTrainerCal() {
   var months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   var days = ["Su","Mo","Tu","We","Th","Fr","Sa"];
@@ -973,18 +1062,15 @@ function renderTrainerCal() {
       html += '<div style="font-weight:700;font-size:13px;color:var(--gold)">'+(existing.label||"Workout")+'</div>';
       html += '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+(existing.exercises||[]).length+' exercises</div>';
       html += '</div>';
-      (existing.exercises||[]).forEach(function(ex){
-        var pr = getExercisePR(state.cLogs, ex.name);
-        var hasVid = !!state.exerciseVideos[ex.name];
-        var isTime = ex.type === "time";
-        html += '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:7px;padding:9px 12px;margin-bottom:5px">';
-        html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">';
-        html += '<span style="font-size:13px;font-weight:600">'+esc(ex.name)+(isTime?' <span style="font-size:9px;color:var(--gold);background:var(--gold2);border-radius:3px;padding:1px 5px;margin-left:4px">TIME</span>':'')+'</span>';
-        html += '<span style="font-size:10px;color:'+(hasVid?"var(--green)":"var(--muted)")+'">'+(hasVid?"🎥":"")+'</span>';
-        html += '</div>';
-        html += '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+ex.sets+'×'+ex.reps+(ex.muscle?' · '+esc(ex.muscle):'')+(ex.rest?' · Rest '+esc(ex.rest):'')+'</div>';
-        if(pr) html += '<div style="font-size:10px;color:var(--gold);margin-top:2px;font-weight:700">🏆 PR: '+pr.weight+' lbs × '+pr.reps+'</div>';
-        html += '</div>';
+      groupExercisesByGroup(existing.exercises||[]).forEach(function(item){
+        if(item.type === "single") {
+          html += renderExCardTrainer(item.ex);
+        } else {
+          html += '<div style="background:var(--teal3);border:1px solid var(--teal);border-radius:8px;padding:8px;margin-bottom:8px">';
+          html += '<div style="font-size:11px;font-weight:800;color:var(--teal2);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">🔄 '+item.label+'</div>';
+          item.exercises.forEach(function(ex){ html += renderExCardTrainer(ex); });
+          html += '</div>';
+        }
       });
       html += '<div style="display:flex;gap:8px;margin-top:6px">';
       html += '<button onclick="editDatedPlanById(\"'+existing.id+'\")" style="flex:1;background:var(--teal3);border:1px solid var(--teal);color:var(--teal2);border-radius:7px;padding:9px;font-family:Barlow Condensed;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:1px;text-transform:uppercase">Edit</button>';
