@@ -470,7 +470,7 @@ function onPlusClick() {
 function renderMain() {
   var el = document.getElementById("mainScroll");
   if(state.view === "clients") el.innerHTML = renderClients();
-  else if(state.view === "log") { el.innerHTML = renderLog(); if(getActive() && !libView) { setRowCounts.q = 3; renderSetRows("q","qSetRowsList",[{reps:"",weight:""},{reps:"",weight:""},{reps:"",weight:""}]); } }
+  else if(state.view === "log") { el.innerHTML = renderLog(); if(getActive() && !libView) { setRowCounts.q = 3; quickLogType = "reps"; renderSetRows("q","qSetRowsList",[{reps:"",weight:""},{reps:"",weight:""},{reps:"",weight:""}]); renderQuickTypeToggle(); } }
   else if(state.view === "nutrition") el.innerHTML = renderNutrition();
   else if(state.view === "plans") el.innerHTML = renderPlans();
   else if(state.view === "habits") el.innerHTML = renderHabits();
@@ -697,6 +697,7 @@ function renderLog() {
   html += '</div>';
 
   html += '</div>';
+  html += '<div id="qTypeToggle" style="display:flex;gap:4px;background:var(--bg);border-radius:16px;padding:3px;margin-bottom:8px;width:fit-content"></div>';
   html += '<div style="font-family:Barlow Condensed;font-size:9px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:5px">Sets</div>';
   html += '<div id="qSetRowsList" style="margin-bottom:8px"></div>';
   html += '<button onclick="addSetRow(\'q\',\'qSetRowsList\')" style="width:100%;background:var(--s1);border:1px dashed var(--b1);border-radius:7px;padding:8px;color:var(--muted);font-size:12px;font-weight:700;cursor:pointer;margin-bottom:10px">+ Add Set</button>';
@@ -1629,6 +1630,22 @@ function openShare() {
   openSheet('shareSheet');
 }
 
+var quickLogType = "reps";
+
+function setQuickLogType(type) {
+  var vals = captureSetValues("q");
+  quickLogType = type;
+  renderSetRows("q", "qSetRowsList", vals, type==="time");
+  renderQuickTypeToggle();
+}
+
+function renderQuickTypeToggle() {
+  var el = document.getElementById("qTypeToggle");
+  if(!el) return;
+  el.innerHTML = '<button onclick="setQuickLogType(\'reps\')" style="padding:5px 12px;border-radius:13px;border:none;cursor:pointer;font-size:11px;font-weight:700;background:'+(quickLogType!=="time"?"var(--teal)":"transparent")+';color:'+(quickLogType!=="time"?"#fff":"var(--muted)")+'">Reps</button>'
+    + '<button onclick="setQuickLogType(\'time\')" style="padding:5px 12px;border-radius:13px;border:none;cursor:pointer;font-size:11px;font-weight:700;background:'+(quickLogType==="time"?"var(--teal)":"transparent")+';color:'+(quickLogType==="time"?"#fff":"var(--muted)")+'">Time</button>';
+}
+
 async function quickLogEx() {
   var exEl = document.getElementById("qex");
 
@@ -1646,7 +1663,7 @@ async function quickLogEx() {
 
   try {
     var payload = setVals.map(function(r){
-      return { client_id: state.activeId, exercise: ex, sets: 1, reps: r.reps, weight: r.weight, muscle: "Full Body", notes: "", date: tod(), from_plan: false, log_type: "reps" };
+      return { client_id: state.activeId, exercise: ex, sets: 1, reps: r.reps, weight: r.weight, muscle: "Full Body", notes: "", date: tod(), from_plan: false, log_type: quickLogType };
     });
     var data = await api("workout_logs", {method:"POST", body:JSON.stringify(payload)});
     if(data && data.length) {
