@@ -174,6 +174,7 @@ body{font-family:'Barlow',sans-serif;color:var(--txt)}
     <div class="f"><label>Full Name *</label><input id="ac_name" placeholder="e.g. Carol Johnson"/></div>
     <div class="f"><label>Goal</label><input id="ac_goal" placeholder="e.g. Lose 20 lbs"/></div>
     <div class="f"><label>Notes</label><input id="ac_notes" placeholder="Injuries, schedule…"/></div>
+    <div class="f"><label>Program End Date</label><input type="date" id="ac_program_end"/></div>
     <div class="sdiv"></div>
     <div style="font-family:Barlow Condensed;font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;font-weight:700;margin-bottom:10px">Macro Targets</div>
     <div class="f"><label>Daily Calories</label><input type="number" id="ac_cal" placeholder="1800"/></div>
@@ -233,6 +234,7 @@ body{font-family:'Barlow',sans-serif;color:var(--txt)}
     <div class="f"><label>Full Name</label><input id="ec_name" placeholder="Full Name"/></div>
     <div class="f"><label>Goal</label><input id="ec_goal" placeholder="Goal"/></div>
     <div class="f"><label>Notes</label><input id="ec_notes" placeholder="Notes"/></div>
+    <div class="f"><label>Program End Date</label><input type="date" id="ec_program_end"/></div>
     <div class="sdiv"></div>
     <div style="font-family:Barlow Condensed;font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;font-weight:700;margin-bottom:10px">Macro Targets</div>
     <div class="f"><label>Daily Calories</label><input type="number" id="ec_cal" placeholder="1800"/></div>
@@ -266,7 +268,7 @@ body{font-family:'Barlow',sans-serif;color:var(--txt)}
         </select>
       </div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
       <div class="f"><label>Type</label>
         <select id="dp_type" onchange="onDPTypeChange()">
           <option value="reps">Reps</option>
@@ -274,6 +276,7 @@ body{font-family:'Barlow',sans-serif;color:var(--txt)}
         </select>
       </div>
       <div class="f"><label>Rest</label><input id="dp_rest" placeholder="e.g. 60 sec"/></div>
+      <div class="f"><label>Target Weight</label><input type="number" inputmode="decimal" id="dp_weight" placeholder="e.g. 135"/></div>
     </div>
     <div class="f"><label>Superset / Circuit Group</label>
       <select id="dp_group" onchange="onDPGroupChange()">
@@ -357,6 +360,7 @@ var state = {
   isAdmin: false,
   view: "clients",
   clients: [],
+  allDatedPlansLite: [],
   activeId: null,
   cLogs: [],
   cProg: [],
@@ -435,14 +439,17 @@ function renderNav() {
   var TABS = (state.isAdmin === true) ? TABS_ADMIN : TABS_BASE;
   var NAV = (state.isAdmin === true) ? NAV_ADMIN : NAV_BASE;
   var totalUnread = (state.messages||[]).filter(function(m){ return m.sender === "client" && !m.read_at; }).length;
+  var expiringCount = getExpiringSoonClients().length;
   var tb = document.getElementById("tabbar");
   tb.innerHTML = TABS.map(function(v){
-    var badge = (v==="messages" && totalUnread>0) ? '<span style="display:inline-block;margin-left:4px;background:var(--red);color:#fff;font-size:9px;font-weight:800;border-radius:8px;padding:1px 5px">'+totalUnread+'</span>' : '';
+    var badge = (v==="messages" && totalUnread>0) ? '<span style="display:inline-block;margin-left:4px;background:var(--red);color:#fff;font-size:9px;font-weight:800;border-radius:8px;padding:1px 5px">'+totalUnread+'</span>' : "";
+    if(v==="clients" && expiringCount>0) badge = '<span style="display:inline-block;margin-left:4px;background:var(--gold);color:#000;font-size:9px;font-weight:800;border-radius:8px;padding:1px 5px">'+expiringCount+'</span>';
     return '<button class="tab'+(state.view===v?" active":"")+'" onclick="switchView(\''+v+'\')">'+(v[0].toUpperCase()+v.slice(1))+badge+'</button>';
   }).join("");
   var bn = document.getElementById("bnav");
   bn.innerHTML = NAV.map(function(n){
-    var badge = (n.id==="messages" && totalUnread>0) ? '<span style="position:absolute;top:2px;right:calc(50% - 20px);background:var(--red);color:#fff;font-size:9px;font-weight:800;border-radius:8px;padding:1px 5px">'+totalUnread+'</span>' : '';
+    var badge = (n.id==="messages" && totalUnread>0) ? '<span style="position:absolute;top:2px;right:calc(50% - 20px);background:var(--red);color:#fff;font-size:9px;font-weight:800;border-radius:8px;padding:1px 5px">'+totalUnread+'</span>' : "";
+    if(n.id==="clients" && expiringCount>0) badge = '<span style="position:absolute;top:2px;right:calc(50% - 20px);background:var(--gold);color:#000;font-size:9px;font-weight:800;border-radius:8px;padding:1px 5px">'+expiringCount+'</span>';
     return '<button onclick="switchView(\''+n.id+'\')" class="bb'+(state.view===n.id?" active":"")+'" style="position:relative">'+badge+'<span class="bi">'+n.i+'</span>'+n.l+'</button>';
   }).join("");
   document.getElementById("switchBtn").style.display = (state.view !== "clients" && getActive()) ? "flex" : "none";
@@ -607,9 +614,17 @@ function renderMain() {
 function clientBanner() {
   var a = getActive();
   if(!a) return "";
+  var daysLeft = getDaysUntilProgramEnd(a);
+  var workoutsLeft = getWorkoutsLeft(a.id);
+  var expiringSoon = daysLeft !== null && daysLeft >= 0 && daysLeft <= 7;
+  var sub = "";
+  if(workoutsLeft !== null) sub = workoutsLeft+" workout"+(workoutsLeft!==1?"s":"")+" left"+(expiringSoon?" · ⏰ ends in "+(daysLeft===0?"today":daysLeft+"d"):"");
   return '<div class="cbanner" onclick="openSheet(\'pickerSheet\')">'
     +'<div class="av sm">'+ini(a.name)+'</div>'
-    +'<div style="flex:1;font-weight:600;font-size:14px">'+esc(a.name)+'</div>'
+    +'<div style="flex:1;min-width:0">'
+    +'<div style="font-weight:600;font-size:14px">'+esc(a.name)+'</div>'
+    +(sub?'<div style="font-size:10px;color:'+(expiringSoon?"var(--gold)":"var(--muted)")+';margin-top:1px">'+sub+'</div>':'')
+    +'</div>'
     +'<span style="font-size:11px;color:var(--teal2);font-weight:600">Switch ›</span>'
     +'</div>';
 }
@@ -622,17 +637,30 @@ function renderClients() {
     +'<div style="flex:1"><div style="font-family:Barlow Condensed;font-size:13px;font-weight:800;letter-spacing:1px;color:var(--gold);text-transform:uppercase">Import from GymTrainer</div>'
     +'<div style="font-size:11px;color:var(--muted);margin-top:2px">Tap to select your GymTrainer backup JSON</div></div>'
     +'<span style="color:var(--gold);font-size:18px">›</span></div>';
+  var expiring = getExpiringSoonClients();
+  if(expiring.length) {
+    html += '<div style="background:var(--gold2);border:1px solid rgba(201,168,76,0.3);border-radius:8px;padding:10px 12px;margin-bottom:12px">';
+    html += '<div style="font-size:12px;font-weight:700;color:var(--gold)">⏰ '+expiring.length+' plan'+(expiring.length!==1?"s":"")+' ending soon</div>';
+    html += '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+expiring.map(function(c){ var d=getDaysUntilProgramEnd(c); return esc(c.name)+" ("+(d===0?"today":d+"d") +")"; }).join(", ")+'</div>';
+    html += '</div>';
+  }
   html += '<div class="sw"><span class="si">🔍</span><input placeholder="Search clients…" value="'+esc(state.srch)+'" oninput="state.srch=this.value;renderMain()"/></div>';
   html += '<div style="font-family:Barlow Condensed;font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:10px">'+state.clients.length+' clients</div>';
   if(fC.length === 0) {
     html += '<div class="empty"><span style="font-size:36px;display:block;margin-bottom:10px">👥</span>'+(state.clients.length===0?"No clients yet\nTap ＋ to add your first":"No results")+'</div>';
   } else {
     fC.forEach(function(c){
+      var daysLeft = getDaysUntilProgramEnd(c);
+      var workoutsLeft = getWorkoutsLeft(c.id);
+      var expiringSoon = daysLeft !== null && daysLeft >= 0 && daysLeft <= 7;
+      var subLine = esc(c.goal||"No goal")+'  ·  PIN: '+(c.pin||"—");
+      if(workoutsLeft !== null) subLine += '  ·  '+workoutsLeft+' workout'+(workoutsLeft!==1?"s":"")+' left';
       html += '<div class="cc'+(state.activeId===c.id?" sel":"")+'" onclick="selectClient(\''+c.id+'\')">'
         +'<div class="av">'+ini(c.name)+'</div>'
         +'<div style="flex:1;min-width:0">'
-        +'<div style="font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(c.name)+'</div>'
-        +'<div style="font-size:11px;color:var(--muted);margin-top:2px">'+esc(c.goal||"No goal")+'  ·  PIN: '+(c.pin||"—")+'</div>'
+        +'<div style="display:flex;align-items:center;gap:6px"><span style="font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(c.name)+'</span>'
+        +(expiringSoon?'<span style="font-size:9px;color:var(--gold);background:var(--gold2);border-radius:3px;padding:1px 5px;flex-shrink:0">⏰ '+(daysLeft===0?"today":daysLeft+"d")+'</span>':'')+'</div>'
+        +'<div style="font-size:11px;color:var(--muted);margin-top:2px">'+subLine+'</div>'
         +'</div>'
         +'<span style="color:var(--muted);font-size:18px">›</span>'
         +'</div>';
@@ -821,6 +849,7 @@ function resetDPForm() {
   document.getElementById("dp_reps").value = "10";
   document.getElementById("dp_type").value = "reps";
   document.getElementById("dp_rest").value = "";
+  document.getElementById("dp_weight").value = "";
   document.getElementById("dp_muscle").selectedIndex = 0;
   onDPTypeChange();
   refreshDPGroupOptions();
@@ -843,6 +872,7 @@ function editDPExercise(idx) {
   onDPTypeChange();
   document.getElementById("dp_reps").value = ex.reps;
   document.getElementById("dp_rest").value = ex.rest || "";
+  document.getElementById("dp_weight").value = ex.weight || "";
   var muscleSel = document.getElementById("dp_muscle");
   for(var i=0;i<muscleSel.options.length;i++){ if(muscleSel.options[i].value === ex.muscle) muscleSel.selectedIndex = i; }
   refreshDPGroupOptions();
@@ -864,6 +894,7 @@ function addDPExercise() {
     reps: document.getElementById("dp_reps").value||(type==="time"?"30 sec":"10"),
     type: type,
     rest: document.getElementById("dp_rest").value.trim() || "",
+    weight: document.getElementById("dp_weight").value.trim() || "",
     muscle: document.getElementById("dp_muscle").value,
     group: groupVal || null
   };
@@ -898,7 +929,7 @@ function renderDPExList() {
   dpExercises.forEach(function(e){ if(e.group) groupCounts[e.group] = (groupCounts[e.group]||0)+1; });
   el.innerHTML = dpExercises.map(function(ex,i){
     var isTime = ex.type === "time";
-    var repsLine = ex.sets+'×'+ex.reps+(isTime?'':'') + ' · '+esc(ex.muscle);
+    var repsLine = ex.sets+'×'+ex.reps+(isTime?'':'') + (ex.weight?' @ '+esc(ex.weight)+' lbs':'') + ' · '+esc(ex.muscle);
     var restLine = ex.rest ? ' · Rest '+esc(ex.rest) : '';
     var hasGroup = !!ex.group;
     var groupLabel = hasGroup ? ((groupCounts[ex.group]>=3?"Circuit ":"Superset ")+ex.group) : "";
@@ -1025,7 +1056,7 @@ function renderExCardTrainer(ex) {
   html += '<span style="font-size:13px;font-weight:600">'+esc(ex.name)+(isTime?' <span style="font-size:9px;color:var(--gold);background:var(--gold2);border-radius:3px;padding:1px 5px;margin-left:4px">TIME</span>':'')+'</span>';
   html += '<span style="font-size:10px;color:'+(hasVid?"var(--green)":"var(--muted)")+'">'+(hasVid?"🎥":"")+'</span>';
   html += '</div>';
-  html += '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+ex.sets+'×'+ex.reps+(ex.muscle?' · '+esc(ex.muscle):'')+(ex.rest?' · Rest '+esc(ex.rest):'')+'</div>';
+  html += '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+ex.sets+'×'+ex.reps+(ex.weight?' @ '+esc(ex.weight)+' lbs':'')+(ex.muscle?' · '+esc(ex.muscle):'')+(ex.rest?' · Rest '+esc(ex.rest):'')+'</div>';
   if(pr) html += '<div style="font-size:10px;color:var(--gold);margin-top:2px;font-weight:700">🏆 PR: '+pr.weight+' lbs × '+pr.reps+(pr.log_type==="time"?" sec":"")+'</div>';
   html += '</div>';
   return html;
@@ -1552,8 +1583,32 @@ async function loadClients() {
       : "clients?select=*&trainer_id=eq."+state.trainer.id+"&order=name.asc";
     var data = await api(url);
     state.clients = data;
+    api("dated_plans?select=client_id,date").then(function(rows){ state.allDatedPlansLite = rows||[]; renderNav(); renderMain(); }).catch(function(){});
   } catch(e) { showToast("Could not connect to database"); }
   renderNav(); renderMain();
+}
+
+function getWorkoutsLeft(clientId) {
+  var client = state.clients.find(function(c){ return c.id === clientId; });
+  if(!client || !client.program_end_date) return null;
+  var today = tod();
+  return (state.allDatedPlansLite||[]).filter(function(p){
+    return p.client_id === clientId && p.date >= today && p.date <= client.program_end_date;
+  }).length;
+}
+
+function getDaysUntilProgramEnd(client) {
+  if(!client || !client.program_end_date) return null;
+  var end = new Date(client.program_end_date+"T12:00:00");
+  var today = new Date(tod()+"T12:00:00");
+  return Math.round((end - today) / 86400000);
+}
+
+function getExpiringSoonClients() {
+  return state.clients.filter(function(c){
+    var d = getDaysUntilProgramEnd(c);
+    return d !== null && d >= 0 && d <= 7;
+  });
 }
 
 async function refreshIfLog() {
@@ -1604,11 +1659,12 @@ async function addClient() {
       protein:+document.getElementById("ac_pro").value||0,
       carbs:+document.getElementById("ac_carb").value||0,
       fat:+document.getElementById("ac_fat").value||0,
+      program_end_date: document.getElementById("ac_program_end").value || null,
       pin:pin
     })});
     state.clients.push(data[0]);
     state.clients.sort(function(a,b){return a.name.localeCompare(b.name);});
-    ["ac_name","ac_goal","ac_notes","ac_cal","ac_pro","ac_carb","ac_fat","ac_bfgoal","ac_wtgoal"].forEach(function(id){document.getElementById(id).value="";});
+    ["ac_name","ac_goal","ac_notes","ac_cal","ac_pro","ac_carb","ac_fat","ac_bfgoal","ac_wtgoal","ac_program_end"].forEach(function(id){document.getElementById(id).value="";});
     closeSheet("addClientSheet");
     showToast(name + " added — PIN: " + pin);
     renderMain();
@@ -1943,6 +1999,7 @@ function openEditClient() {
   document.getElementById("ec_fat").value = a.fat || "";
   document.getElementById("ec_bfgoal").value = a.bf_goal || "";
   document.getElementById("ec_wtgoal").value = a.wt_goal || "";
+  document.getElementById("ec_program_end").value = a.program_end_date || "";
   openSheet("editClientSheet");
 }
 
@@ -1964,7 +2021,8 @@ async function saveEditClient() {
       carbs:+document.getElementById("ec_carb").value||0,
       fat:+document.getElementById("ec_fat").value||0,
       bf_goal:+document.getElementById("ec_bfgoal").value||null,
-      wt_goal:+document.getElementById("ec_wtgoal").value||null
+      wt_goal:+document.getElementById("ec_wtgoal").value||null,
+      program_end_date: document.getElementById("ec_program_end").value || null
     })});
     var idx = state.clients.findIndex(function(c){return c.id===a.id;});
     if(idx !== -1) {
@@ -1977,8 +2035,7 @@ async function saveEditClient() {
       state.clients[idx].fat = +document.getElementById("ec_fat").value||0;
       state.clients[idx].bf_goal = +document.getElementById("ec_bfgoal").value||null;
       state.clients[idx].wt_goal = +document.getElementById("ec_wtgoal").value||null;
-      state.clients[idx].bf_goal = +document.getElementById("ec_bfgoal").value||null;
-      state.clients[idx].wt_goal = +document.getElementById("ec_wtgoal").value||null;
+      state.clients[idx].program_end_date = document.getElementById("ec_program_end").value || null;
     }
     closeSheet("editClientSheet");
     showToast("Client updated");
