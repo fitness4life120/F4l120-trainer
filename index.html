@@ -1,4 +1,4 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
@@ -1084,6 +1084,74 @@ function renderPlans() {
 }
 
 
+function togglePhotoSelect(id) {
+  var idx = state.selectedPhotoIds.indexOf(id);
+  if(idx > -1) { state.selectedPhotoIds.splice(idx,1); }
+  else {
+    if(state.selectedPhotoIds.length >= 2) state.selectedPhotoIds.shift();
+    state.selectedPhotoIds.push(id);
+  }
+  renderMain();
+}
+
+function openPhotoCompare() {
+  var photos = state.selectedPhotoIds.map(function(id){ return state.progressPhotos.find(function(p){ return p.id===id; }); }).filter(Boolean);
+  photos.sort(function(a,b){ return new Date(a.date) - new Date(b.date); });
+  if(photos.length !== 2) return;
+  var overlay = document.createElement("div");
+  overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.9);z-index:999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px";
+  overlay.onclick = function(){ document.body.removeChild(overlay); };
+  var inner = '<div style="display:flex;gap:8px;width:100%;max-width:600px">';
+  photos.forEach(function(p) {
+    var src = state.signedPhotoUrls[p.id] || "";
+    inner += '<div style="flex:1;text-align:center"><img src="'+src+'" style="width:100%;border-radius:8px"><div style="color:#fff;font-size:12px;margin-top:6px">'+p.date+'</div><div style="color:var(--gold);font-size:11px">'+esc(p.angle||"")+'</div></div>';
+  });
+  inner += '</div><div style="color:#fff;font-size:12px;margin-top:16px;opacity:0.7">Tap anywhere to close</div>';
+  overlay.innerHTML = inner;
+  document.body.appendChild(overlay);
+}
+
+function extractPhotoPath(pathOrUrl) {
+  var marker = "/progress-photos/";
+  return pathOrUrl.indexOf(marker) > -1 ? pathOrUrl.split(marker)[1] : pathOrUrl;
+}
+
+async function getSignedPhotoUrl(pathOrUrl) {
+  var path = extractPhotoPath(pathOrUrl);
+  try {
+    var res = await fetch(SUPA+"/storage/v1/object/sign/progress-photos/"+path, {
+      method: "POST",
+      headers: {"apikey":KEY,"Authorization":"Bearer "+KEY,"Content-Type":"application/json"},
+      body: JSON.stringify({ expiresIn: 86400 })
+    });
+    if(!res.ok) return null;
+    var data = await res.json();
+    return SUPA+"/storage/v1"+data.signedURL;
+  } catch(e) { return null; }
+}
+
+async function resolveProgressPhotoUrls() {
+  var missing = state.progressPhotos.filter(function(p){ return !state.signedPhotoUrls[p.id]; });
+  if(!missing.length) return;
+  var results = await Promise.all(missing.map(function(p){ return getSignedPhotoUrl(p.photo_url); }));
+  missing.forEach(function(p, i){ if(results[i]) state.signedPhotoUrls[p.id] = results[i]; });
+}
+
+async function deleteProgressPhotoById(id, photoUrl) {
+  if(!confirm("Delete this photo?")) return;
+  try {
+    await api("progress_photos?id=eq."+id, { method:"DELETE" });
+    try {
+      var path = extractPhotoPath(photoUrl);
+      await fetch(SUPA+"/storage/v1/object/progress-photos/"+path, { method:"DELETE", headers:{"apikey":KEY,"Authorization":"Bearer "+KEY} });
+    } catch(e2) {}
+    state.progressPhotos = state.progressPhotos.filter(function(p){ return p.id !== id; });
+    state.selectedPhotoIds = state.selectedPhotoIds.filter(function(pid){ return pid !== id; });
+    delete state.signedPhotoUrls[id];
+    renderMain();
+  } catch(e) { showToast("Could not delete photo"); }
+}
+
 function renderProgress() {
   var a = getActive();
   if(!a) return '<div class="empty"><span style="font-size:36px;display:block;margin-bottom:10px">👆</span>Select a client first</div>';
@@ -1105,6 +1173,27 @@ function renderProgress() {
     if(a.wt_goal) html += '<div style="background:var(--bg);border:1px solid var(--b1);border-radius:7px;padding:12px 8px"><div style="font-family:Barlow Condensed;font-size:22px;font-weight:800;color:var(--green);line-height:1">'+a.wt_goal+' lbs</div><div style="font-family:Barlow Condensed;font-size:9px;letter-spacing:1px;color:var(--muted);text-transform:uppercase;margin-top:3px">Weight Goal</div></div>';
     html += '</div></div>';
   }
+  html += '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="clbl" style="margin-bottom:0">Progress Photos</div></div>';
+  if(!state.progressPhotos.length) {
+    html += '<div style="color:var(--muted);font-size:12px;font-style:italic">No progress photos yet</div>';
+  } else {
+    if(state.selectedPhotoIds.length === 2) {
+      html += '<button onclick="openPhotoCompare()" style="width:100%;background:var(--teal);color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:12px">Compare Selected Photos</button>';
+    }
+    html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">';
+    state.progressPhotos.forEach(function(p) {
+      var isSel = state.selectedPhotoIds.indexOf(p.id) > -1;
+      var src = state.signedPhotoUrls[p.id];
+      html += '<div style="position:relative">'
+        + (src ? '<img src="'+src+'" onclick="togglePhotoSelect(\''+p.id+'\')" style="width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:8px;cursor:pointer;border:'+(isSel?"3px solid var(--teal)":"1px solid var(--b1)")+'">' : '<div style="width:100%;aspect-ratio:3/4;border-radius:8px;background:var(--s1);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:10px">Loading…</div>')
+        + '<div style="font-size:9px;color:var(--muted);text-align:center;margin-top:3px">'+p.date+'</div>'
+        + '<div style="font-size:9px;color:var(--gold);text-align:center">'+esc(p.angle||"")+'</div>'
+        + '<button onclick="deleteProgressPhotoById(\''+p.id+'\',\''+p.photo_url.replace(/'/g,"\\'")+'\')" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.6);color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:11px;cursor:pointer;line-height:1">✕</button>'
+        + '</div>';
+    });
+    html += '</div>';
+  }
+  html += '</div>';
   html += '<div class="card"><div class="clbl">Weight History</div>';
   if(state.cProg.length === 0) {
     html += '<div style="color:var(--muted);font-size:12px;font-style:italic">No entries yet</div>';
@@ -1356,10 +1445,12 @@ async function loadClientData(id) {
       api("dated_plans?client_id=eq."+id+"&order=date.asc"),
       api("nutrition_logs?client_id=eq."+id+"&order=created_at.asc"),
       api("habits?client_id=eq."+id+"&order=created_at.asc"),
-      api("habit_logs?client_id=eq."+id+"&order=date.desc")
+      api("habit_logs?client_id=eq."+id+"&order=date.desc"),
+      api("progress_photos?client_id=eq."+id+"&order=date.desc")
     ]);
     state.cLogs = results[0]; state.cProg = results[1]; state.cPlans = results[2]; state.datedPlans = results[3]||[]; state.nLogs = results[4]||[];
-    state.habits = results[5]||[]; state.habitLogs = results[6]||[];
+    state.habits = results[5]||[]; state.habitLogs = results[6]||[]; state.progressPhotos = results[7]||[];
+    resolveProgressPhotoUrls().then(function(){ if(state.view === "progress") renderMain(); });
   } catch(e) { showToast("Error loading data"); }
 }
 
@@ -2332,6 +2423,9 @@ document.addEventListener("click", function(e) {
 
 state.habits = [];
 state.habitLogs = [];
+state.progressPhotos = [];
+state.selectedPhotoIds = [];
+state.signedPhotoUrls = {};
 
 function fmtDateISOHabit(d) { return d.toISOString().slice(0,10); }
 
