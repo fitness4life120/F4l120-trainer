@@ -306,23 +306,15 @@ body{font-family:'Barlow',sans-serif;color:var(--txt)}
 <div class="overlay" id="logExSheet">
   <div class="sheet">
     <div class="hdl"></div>
-    <div class="stitle">Log Exercise</div>
+    <div class="stitle" id="logExTitle">Log Exercise</div>
     <div id="logExClientName" style="font-family:Barlow Condensed;font-size:11px;color:var(--teal2);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px"></div>
-    <div class="f"><label>Exercise Name</label><input id="le_exercise" placeholder="e.g. Barbell Squat"/></div>
-    <div style="font-family:Barlow Condensed;font-size:9px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:5px">Sets</div>
-    <div id="logExSetRowsList" style="margin-bottom:8px"></div>
-    <button onclick="addSetRow('le','logExSetRowsList')" style="width:100%;background:var(--s1);border:1px dashed var(--b1);border-radius:7px;padding:8px;color:var(--muted);font-size:12px;font-weight:700;cursor:pointer;margin-bottom:10px">+ Add Set</button>
-    <div class="fr2">
-      <div class="f"><label>Muscle Group</label>
-        <select id="le_muscle">
-          <option>Chest</option><option>Back</option><option>Shoulders</option><option>Biceps</option><option>Triceps</option><option>Legs</option><option>Glutes</option><option>Core</option><option>Cardio</option><option>Full Body</option>
-        </select>
-      </div>
-      <div class="f"><label>Date</label><input type="date" id="le_date"/></div>
-    </div>
+    <div id="logExBlocksContainer"></div>
+    <button onclick="addLogExBlock()" style="width:100%;background:var(--teal3);border:1px dashed var(--teal);border-radius:7px;padding:8px;color:var(--teal2);font-size:12px;font-weight:700;cursor:pointer;margin-bottom:10px">+ Add Exercise (Superset/Circuit)</button>
+    <div class="f"><label>Date</label><input type="date" id="le_date"/></div>
     <div class="f"><label>Notes / RPE</label><input id="le_notes" placeholder="PR, RPE 8, felt strong..."/></div>
-    <button class="bp" onclick="saveLogEx()">Log It</button>
+    <button class="bp" id="logExSubmitBtn" onclick="saveLogEx()">Log It</button>
     <button class="bg_" onclick="closeSheet('logExSheet')">Cancel</button>
+
   </div>
 </div>
 
@@ -650,6 +642,24 @@ function renderClients() {
 }
 
 // LOG VIEW
+function nestLogsBySupersetGroup(exerciseGroups) {
+  var result = [];
+  var seen = {};
+  exerciseGroups.forEach(function(eg){
+    var gid = eg.sets[0] && eg.sets[0].exercise_group;
+    if(!gid) { result.push({type:"single", group:eg}); return; }
+    if(seen[gid]) {
+      var entry = result.filter(function(r){ return r.type==="superset" && r.groupId===gid; })[0];
+      if(entry) entry.groups.push(eg);
+      return;
+    }
+    seen[gid] = true;
+    result.push({type:"superset", groupId:gid, groups:[eg]});
+  });
+  result.forEach(function(r){ if(r.type==="superset") r.label = r.groups.length>=3 ? "Circuit" : "Superset"; });
+  return result;
+}
+
 function groupLogsByExercise(dayLogs) {
   var map = {}; var order = [];
   dayLogs.slice().sort(function(a,b){ return new Date(a.created_at)-new Date(b.created_at); }).forEach(function(l){
@@ -702,35 +712,48 @@ function renderLog() {
   } else {
     dates.forEach(function(d){
       var groups = groupLogsByExercise(grp[d]);
+      var nested = nestLogsBySupersetGroup(groups);
       html += '<div class="dh"><span class="dl">'+fmt(d)+'</span><div class="dline"></div><span class="dc">'+groups.length+'</span></div>';
-      groups.forEach(function(g){
-        var vol = g.sets.reduce(function(a,s){ return a+((+s.sets||1)*(+s.reps||0)*(+s.weight||0)); },0);
-        var pr = getExercisePR(state.cLogs, g.exercise);
-        var vidUrl = state.exerciseVideos[g.exercise];
-        var vid = vidUrl ? getYouTubeId(vidUrl) : null;
-        html += '<div class="exr"><div class="exr-top">'
-          +'<span class="exr-name">'+esc(g.exercise)+'</span>'
-          +(g.from_plan?'<span class="chip" style="color:var(--gold);background:var(--gold2)">Plan</span>':'')
-          +'</div>';
-        html += '<div style="display:flex;flex-direction:column;gap:3px;margin:6px 0">';
-        g.sets.forEach(function(s,i){
-          html += '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted)">'
-            + '<span>Set '+(i+1)+': '+(s.reps||"?")+' reps'+(s.weight?' @ '+s.weight+' lbs':'')+'</span>'
-            + '<button data-exid="'+s.id+'" class="del-ex-btn" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:11px;text-decoration:underline;padding:2px 4px">remove</button>'
-            + '</div>';
-        });
-        html += '</div>';
-        html += '<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">'
-          +(g.muscle?'<span class="mtag">'+esc(g.muscle)+'</span>':'')
-          +(vol>0?'<span class="chip" style="font-size:9px;color:var(--muted)">'+vol.toLocaleString()+' vol</span>':'')
-          +(g.notes?'<span style="font-size:10px;color:var(--soft);font-style:italic">'+esc(g.notes)+'</span>':'')
-          +(vid?'<a href="https://www.youtube.com/watch?v='+vid+'" target="_blank" style="font-size:10px;color:var(--teal2);background:var(--teal3);border:1px solid var(--teal);border-radius:5px;padding:3px 8px;text-decoration:none">▶ Watch</a>':'')
-          +'</div>'
-          +(pr?'<div style="font-size:10px;color:var(--gold);margin-top:4px;font-weight:700">🏆 PR: '+pr.weight+' lbs × '+pr.reps+'</div>':'')
-          +'</div>';
+      nested.forEach(function(item){
+        if(item.type === "single") {
+          html += renderExGroupTrainer(item.group);
+        } else {
+          html += '<div style="background:var(--teal3);border:1px solid var(--teal);border-radius:8px;padding:8px;margin-bottom:8px">';
+          html += '<div style="font-size:11px;font-weight:800;color:var(--teal2);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">🔄 '+item.label+'</div>';
+          item.groups.forEach(function(g){ html += renderExGroupTrainer(g); });
+          html += '</div>';
+        }
       });
     });
   }
+  return html;
+}
+
+function renderExGroupTrainer(g) {
+  var vol = g.sets.reduce(function(a,s){ return a+((+s.sets||1)*(+s.reps||0)*(+s.weight||0)); },0);
+  var pr = getExercisePR(state.cLogs, g.exercise);
+  var vidUrl = state.exerciseVideos[g.exercise];
+  var vid = vidUrl ? getYouTubeId(vidUrl) : null;
+  var html = '<div class="exr"><div class="exr-top">'
+    +'<span class="exr-name">'+esc(g.exercise)+'</span>'
+    +(g.from_plan?'<span class="chip" style="color:var(--gold);background:var(--gold2)">Plan</span>':'')
+    +'</div>';
+  html += '<div style="display:flex;flex-direction:column;gap:3px;margin:6px 0">';
+  g.sets.forEach(function(s,i){
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted)">'
+      + '<span>Set '+(i+1)+': '+(s.reps||"?")+' reps'+(s.weight?' @ '+s.weight+' lbs':'')+'</span>'
+      + '<button data-exid="'+s.id+'" class="del-ex-btn" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:11px;text-decoration:underline;padding:2px 4px">remove</button>'
+      + '</div>';
+  });
+  html += '</div>';
+  html += '<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">'
+    +(g.muscle?'<span class="mtag">'+esc(g.muscle)+'</span>':'')
+    +(vol>0?'<span class="chip" style="font-size:9px;color:var(--muted)">'+vol.toLocaleString()+' vol</span>':'')
+    +(g.notes?'<span style="font-size:10px;color:var(--soft);font-style:italic">'+esc(g.notes)+'</span>':'')
+    +(vid?'<a href="https://www.youtube.com/watch?v='+vid+'" target="_blank" style="font-size:10px;color:var(--teal2);background:var(--teal3);border:1px solid var(--teal);border-radius:5px;padding:3px 8px;text-decoration:none">▶ Watch</a>':'')
+    +'</div>'
+    +(pr?'<div style="font-size:10px;color:var(--gold);margin-top:4px;font-weight:700">🏆 PR: '+pr.weight+' lbs × '+pr.reps+'</div>':'')
+    +'</div>';
   return html;
 }
 
@@ -1680,6 +1703,46 @@ function removeSetRow(prefix, containerId, idx) {
   renderSetRows(prefix, containerId, vals);
 }
 
+var logExBlockIds = [0];
+var logExNextBlockId = 1;
+
+function renderLogExBlocks() {
+  var container = document.getElementById("logExBlocksContainer");
+  if(!container) return;
+  document.getElementById("logExTitle").textContent = logExBlockIds.length>1 ? (logExBlockIds.length>=3?"Circuit":"Superset") : "Log Exercise";
+  document.getElementById("logExSubmitBtn").textContent = logExBlockIds.length>1 ? "Log All" : "Log It";
+  var html = "";
+  logExBlockIds.forEach(function(bid, idx){
+    html += '<div style="margin-bottom:14px;padding-bottom:'+(idx<logExBlockIds.length-1?'14px':'0')+';border-bottom:'+(idx<logExBlockIds.length-1?'1px dashed var(--b1)':'none')+'">';
+    if(logExBlockIds.length>1) html += '<div style="font-size:10px;color:var(--teal2);font-weight:700;margin-bottom:4px">Exercise '+(idx+1)+'</div>';
+    html += '<div style="display:flex;gap:6px;margin-bottom:8px">';
+    html += '<input placeholder="Exercise name" id="le_exercise_'+bid+'" style="flex:1;background:var(--bg);border:1.5px solid var(--b1);border-radius:8px;padding:11px;color:var(--txt);font-family:Barlow,sans-serif;font-size:14px;outline:none">';
+    if(logExBlockIds.length>1) html += '<button onclick="removeLogExBlock('+bid+')" style="background:transparent;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:0 6px;flex-shrink:0">✕</button>';
+    html += '</div>';
+    html += '<div class="f"><label>Muscle Group</label><select id="le_muscle_'+bid+'"><option>Chest</option><option>Back</option><option>Shoulders</option><option>Biceps</option><option>Triceps</option><option>Legs</option><option>Glutes</option><option>Core</option><option>Cardio</option><option>Full Body</option></select></div>';
+    html += '<div style="font-family:Barlow Condensed;font-size:9px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin:8px 0 5px">Sets</div>';
+    html += '<div id="logExSetRowsList_'+bid+'" style="margin-bottom:8px"></div>';
+    html += '<button onclick="addSetRow(\'le'+bid+'\',\'logExSetRowsList_'+bid+'\')" style="width:100%;background:var(--s1);border:1px dashed var(--b1);border-radius:7px;padding:8px;color:var(--muted);font-size:12px;font-weight:700;cursor:pointer">+ Add Set</button>';
+    html += '</div>';
+  });
+  container.innerHTML = html;
+  logExBlockIds.forEach(function(bid){
+    setRowCounts["le"+bid] = 3;
+    renderSetRows("le"+bid, "logExSetRowsList_"+bid, [{reps:"",weight:""},{reps:"",weight:""},{reps:"",weight:""}]);
+  });
+}
+
+function addLogExBlock() {
+  logExBlockIds.push(logExNextBlockId++);
+  renderLogExBlocks();
+}
+
+function removeLogExBlock(bid) {
+  logExBlockIds = logExBlockIds.filter(function(b){ return b!==bid; });
+  delete setRowCounts["le"+bid];
+  renderLogExBlocks();
+}
+
 function openLogEx() {
   console.log("openLogEx called", state.activeId);
   var sheet = document.getElementById("logExSheet");
@@ -1687,25 +1750,37 @@ function openLogEx() {
   if(!sheet) { showToast("Sheet not found"); return; }
   var a = getActive(); if(!a) return;
   document.getElementById("logExClientName").textContent = a.name;
-  document.getElementById("le_exercise").value = "";
   document.getElementById("le_notes").value = "";
   document.getElementById("le_date").value = tod();
-  setRowCounts.le = 3;
-  renderSetRows("le", "logExSetRowsList", [{reps:"",weight:""},{reps:"",weight:""},{reps:"",weight:""}]);
+  logExBlockIds = [0];
+  logExNextBlockId = 1;
+  renderLogExBlocks();
   openSheet("logExSheet");
 }
 
 async function saveLogEx() {
-  var ex = document.getElementById("le_exercise").value.trim();
-  if(!ex || !state.activeId) return;
-  var setVals = captureSetValues("le").filter(function(r){ return String(r.reps).trim()!=="" || String(r.weight).trim()!==""; });
-  if(!setVals.length) { showToast("Add at least one set"); return; }
+  var blocks = logExBlockIds.map(function(bid){
+    var exEl = document.getElementById("le_exercise_"+bid);
+    var muscleEl = document.getElementById("le_muscle_"+bid);
+    return {
+      exercise: exEl ? exEl.value.trim() : "",
+      muscle: muscleEl ? muscleEl.value : "Full Body",
+      setVals: captureSetValues("le"+bid).filter(function(r){ return String(r.reps).trim()!=="" || String(r.weight).trim()!==""; })
+    };
+  }).filter(function(b){ return b.exercise && b.setVals.length; });
+
+  if(!blocks.length || !state.activeId) { showToast("Add an exercise with at least one set"); return; }
+
+  var groupId = blocks.length > 1 ? (Date.now().toString(36)+Math.random().toString(36).slice(2,6)) : null;
+  var notes = document.getElementById("le_notes").value.trim();
+  var date = document.getElementById("le_date").value || tod();
+
   try {
-    var muscle = document.getElementById("le_muscle").value;
-    var notes = document.getElementById("le_notes").value.trim();
-    var date = document.getElementById("le_date").value || tod();
-    var payload = setVals.map(function(r){
-      return { client_id: state.activeId, exercise: ex, sets: 1, reps: r.reps, weight: r.weight, muscle: muscle, notes: notes, date: date, from_plan: false };
+    var payload = [];
+    blocks.forEach(function(b){
+      b.setVals.forEach(function(r){
+        payload.push({ client_id: state.activeId, exercise: b.exercise, sets: 1, reps: r.reps, weight: r.weight, muscle: b.muscle, notes: notes, date: date, from_plan: false, exercise_group: groupId });
+      });
     });
     var data = await api("workout_logs", {method:"POST", body:JSON.stringify(payload)});
     if(data && data.length) {
@@ -1714,7 +1789,7 @@ async function saveLogEx() {
       await loadClientData(state.activeId);
     }
     closeSheet("logExSheet");
-    showToast("Logged ✓ ("+setVals.length+" set"+(setVals.length!==1?"s":"")+")");
+    showToast("Logged ✓ ("+payload.length+" set"+(payload.length!==1?"s":"")+")");
     renderMain();
   } catch(e) { showToast("Could not save: " + e.message); }
 }
