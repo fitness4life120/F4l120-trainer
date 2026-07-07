@@ -361,6 +361,8 @@ var state = {
   view: "clients",
   clients: [],
   allDatedPlansLite: [],
+  allLogsLite: [],
+  waterLogs: [],
   activeId: null,
   cLogs: [],
   cProg: [],
@@ -440,16 +442,18 @@ function renderNav() {
   var NAV = (state.isAdmin === true) ? NAV_ADMIN : NAV_BASE;
   var totalUnread = (state.messages||[]).filter(function(m){ return m.sender === "client" && !m.read_at; }).length;
   var expiringCount = getExpiringSoonClients().length;
+  var quietCount = getQuietClients().length;
+  var attentionCount = expiringCount + quietCount;
   var tb = document.getElementById("tabbar");
   tb.innerHTML = TABS.map(function(v){
     var badge = (v==="messages" && totalUnread>0) ? '<span style="display:inline-block;margin-left:4px;background:var(--red);color:#fff;font-size:9px;font-weight:800;border-radius:8px;padding:1px 5px">'+totalUnread+'</span>' : "";
-    if(v==="clients" && expiringCount>0) badge = '<span style="display:inline-block;margin-left:4px;background:var(--gold);color:#000;font-size:9px;font-weight:800;border-radius:8px;padding:1px 5px">'+expiringCount+'</span>';
+    if(v==="clients" && attentionCount>0) badge = '<span style="display:inline-block;margin-left:4px;background:var(--gold);color:#000;font-size:9px;font-weight:800;border-radius:8px;padding:1px 5px">'+attentionCount+'</span>';
     return '<button class="tab'+(state.view===v?" active":"")+'" onclick="switchView(\''+v+'\')">'+(v[0].toUpperCase()+v.slice(1))+badge+'</button>';
   }).join("");
   var bn = document.getElementById("bnav");
   bn.innerHTML = NAV.map(function(n){
     var badge = (n.id==="messages" && totalUnread>0) ? '<span style="position:absolute;top:2px;right:calc(50% - 20px);background:var(--red);color:#fff;font-size:9px;font-weight:800;border-radius:8px;padding:1px 5px">'+totalUnread+'</span>' : "";
-    if(n.id==="clients" && expiringCount>0) badge = '<span style="position:absolute;top:2px;right:calc(50% - 20px);background:var(--gold);color:#000;font-size:9px;font-weight:800;border-radius:8px;padding:1px 5px">'+expiringCount+'</span>';
+    if(n.id==="clients" && attentionCount>0) badge = '<span style="position:absolute;top:2px;right:calc(50% - 20px);background:var(--gold);color:#000;font-size:9px;font-weight:800;border-radius:8px;padding:1px 5px">'+attentionCount+'</span>';
     return '<button onclick="switchView(\''+n.id+'\')" class="bb'+(state.view===n.id?" active":"")+'" style="position:relative">'+badge+'<span class="bi">'+n.i+'</span>'+n.l+'</button>';
   }).join("");
   document.getElementById("switchBtn").style.display = (state.view !== "clients" && getActive()) ? "flex" : "none";
@@ -644,6 +648,13 @@ function renderClients() {
     html += '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+expiring.map(function(c){ var d=getDaysUntilProgramEnd(c); return esc(c.name)+" ("+(d===0?"today":d+"d") +")"; }).join(", ")+'</div>';
     html += '</div>';
   }
+  var quiet = getQuietClients();
+  if(quiet.length) {
+    html += '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:8px;padding:10px 12px;margin-bottom:12px">';
+    html += '<div style="font-size:12px;font-weight:700;color:var(--muted)">💤 '+quiet.length+' client'+(quiet.length!==1?"s":"")+' gone quiet</div>';
+    html += '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+quiet.map(function(c){ var d=getDaysSinceLastLog(c.id); return esc(c.name)+" ("+(d===null?"never logged":d+"d ago")+")"; }).join(", ")+'</div>';
+    html += '</div>';
+  }
   html += '<div class="sw"><span class="si">🔍</span><input placeholder="Search clients…" value="'+esc(state.srch)+'" oninput="state.srch=this.value;renderMain()"/></div>';
   html += '<div style="font-family:Barlow Condensed;font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:10px">'+state.clients.length+' clients</div>';
   if(fC.length === 0) {
@@ -653,13 +664,16 @@ function renderClients() {
       var daysLeft = getDaysUntilProgramEnd(c);
       var workoutsLeft = getWorkoutsLeft(c.id);
       var expiringSoon = daysLeft !== null && daysLeft >= 0 && daysLeft <= 7;
+      var daysQuiet = getDaysSinceLastLog(c.id);
+      var isQuiet = quiet.some(function(qc){ return qc.id === c.id; });
       var subLine = esc(c.goal||"No goal")+'  ·  PIN: '+(c.pin||"—");
       if(workoutsLeft !== null) subLine += '  ·  '+workoutsLeft+' workout'+(workoutsLeft!==1?"s":"")+' left';
       html += '<div class="cc'+(state.activeId===c.id?" sel":"")+'" onclick="selectClient(\''+c.id+'\')">'
         +'<div class="av">'+ini(c.name)+'</div>'
         +'<div style="flex:1;min-width:0">'
         +'<div style="display:flex;align-items:center;gap:6px"><span style="font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(c.name)+'</span>'
-        +(expiringSoon?'<span style="font-size:9px;color:var(--gold);background:var(--gold2);border-radius:3px;padding:1px 5px;flex-shrink:0">⏰ '+(daysLeft===0?"today":daysLeft+"d")+'</span>':'')+'</div>'
+        +(expiringSoon?'<span style="font-size:9px;color:var(--gold);background:var(--gold2);border-radius:3px;padding:1px 5px;flex-shrink:0">⏰ '+(daysLeft===0?"today":daysLeft+"d")+'</span>':'')
+        +(isQuiet?'<span style="font-size:9px;color:var(--muted);background:var(--s1);border:1px solid var(--b1);border-radius:3px;padding:1px 5px;flex-shrink:0">💤 '+(daysQuiet===null?"quiet":daysQuiet+"d")+'</span>':'')+'</div>'
         +'<div style="font-size:11px;color:var(--muted);margin-top:2px">'+subLine+'</div>'
         +'</div>'
         +'<span style="color:var(--muted);font-size:18px">›</span>'
@@ -1584,6 +1598,7 @@ async function loadClients() {
     var data = await api(url);
     state.clients = data;
     api("dated_plans?select=client_id,date").then(function(rows){ state.allDatedPlansLite = rows||[]; renderNav(); renderMain(); }).catch(function(){});
+    api("workout_logs?select=client_id,created_at&order=created_at.desc&limit=2000").then(function(rows){ state.allLogsLite = rows||[]; renderNav(); renderMain(); }).catch(function(){});
   } catch(e) { showToast("Could not connect to database"); }
   renderNav(); renderMain();
 }
@@ -1611,6 +1626,24 @@ function getExpiringSoonClients() {
   });
 }
 
+function getDaysSinceLastLog(clientId) {
+  var logsForClient = (state.allLogsLite||[]).filter(function(l){ return l.client_id === clientId; });
+  if(!logsForClient.length) return null;
+  var mostRecent = logsForClient.reduce(function(latest,l){ return new Date(l.created_at) > new Date(latest.created_at) ? l : latest; });
+  var diffMs = new Date() - new Date(mostRecent.created_at);
+  return Math.floor(diffMs / 86400000);
+}
+
+function getQuietClients() {
+  var QUIET_THRESHOLD_DAYS = 7;
+  return state.clients.filter(function(c){
+    var createdRecently = c.created_at && (new Date() - new Date(c.created_at)) < (QUIET_THRESHOLD_DAYS*86400000);
+    if(createdRecently) return false; // don't flag brand-new clients who just haven't started yet
+    var days = getDaysSinceLastLog(c.id);
+    return days === null || days >= QUIET_THRESHOLD_DAYS;
+  });
+}
+
 async function refreshIfLog() {
   if(state.view === "log" && state.activeId) {
     await loadClientData(state.activeId);
@@ -1628,10 +1661,11 @@ async function loadClientData(id) {
       api("nutrition_logs?client_id=eq."+id+"&order=created_at.asc"),
       api("habits?client_id=eq."+id+"&order=created_at.asc"),
       api("habit_logs?client_id=eq."+id+"&order=date.desc"),
-      api("progress_photos?client_id=eq."+id+"&order=date.desc")
+      api("progress_photos?client_id=eq."+id+"&order=date.desc"),
+      api("water_logs?client_id=eq."+id)
     ]);
     state.cLogs = results[0]; state.cProg = results[1]; state.cPlans = results[2]; state.datedPlans = results[3]||[]; state.nLogs = results[4]||[];
-    state.habits = results[5]||[]; state.habitLogs = results[6]||[]; state.progressPhotos = results[7]||[];
+    state.habits = results[5]||[]; state.habitLogs = results[6]||[]; state.progressPhotos = results[7]||[]; state.waterLogs = results[8]||[];
     resolveProgressPhotoUrls().then(function(){ if(state.view === "progress") renderMain(); });
   } catch(e) { showToast("Error loading data"); }
 }
@@ -3075,6 +3109,13 @@ function renderNutrition() {
     + macroBox("Carbs", totals.carbs_g, carbGoal, "#ffd54f")
     + macroBox("Fat", totals.fat_g, fatGoal, "#ef9a9a")
     + macroBox("Fiber", totals.fiber_g, null, "#a5d6a7")
+    + '</div></div>';
+  var waterEntry = state.waterLogs.filter(function(w){ return w.date === state.nDate; })[0];
+  var waterGlasses = waterEntry ? waterEntry.glasses : 0;
+  html += '<div class="card">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div class="clbl" style="margin-bottom:0">Water</div><span style="font-size:11px;color:var(--muted)">' + waterGlasses + ' of 8 glasses</span></div>'
+    + '<div style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap">'
+    + Array.from({length:8}).map(function(_,i){ return '<span style="font-size:18px;opacity:' + (i<waterGlasses?"1":"0.25") + '">💧</span>'; }).join("")
     + '</div></div>';
   html += '<div class="card">'
     + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="clbl" style="margin-bottom:0">This Week</div><span style="font-size:11px;color:var(--muted)">' + wLabel + '</span></div>'
