@@ -363,6 +363,7 @@ var state = {
   allDatedPlansLite: [],
   allLogsLite: [],
   waterLogs: [],
+  selectedProgressExercise: null,
   activeId: null,
   cLogs: [],
   cProg: [],
@@ -1354,6 +1355,71 @@ function adherenceColor(pct) {
   return "var(--red)";
 }
 
+var CHART_COLORS = ["#22a8be","#C9A84C","#2dba80","#e07a52","#a86bcc","#52b0e0"];
+
+function drawLineChart(canvasId, data, color) {
+  var canvas = document.getElementById(canvasId);
+  if(!canvas || data.length < 2) return;
+  var ctx = canvas.getContext("2d");
+  var dpr = window.devicePixelRatio || 1;
+  var rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = 120 * dpr;
+  ctx.scale(dpr, dpr);
+  var W = rect.width, H = 120;
+  var pad = {t:12, r:12, b:28, l:40};
+  var cW = W - pad.l - pad.r;
+  var cH = H - pad.t - pad.b;
+  var vals = data.map(function(d){ return d.v; });
+  var minV = Math.min.apply(null, vals) - 1;
+  var maxV = Math.max.apply(null, vals) + 1;
+  ctx.clearRect(0, 0, W, H);
+  ctx.strokeStyle = "rgba(28,48,64,0.8)"; ctx.lineWidth = 1;
+  for(var i = 0; i <= 3; i++) {
+    var y = pad.t + (cH/3)*i;
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W-pad.r, y); ctx.stroke();
+    var val = (maxV - ((maxV-minV)/3)*i).toFixed(0);
+    ctx.fillStyle = "#3e6474"; ctx.font = "9px system-ui"; ctx.textAlign = "right";
+    ctx.fillText(val, pad.l-4, y+3);
+  }
+  var grad = ctx.createLinearGradient(0, pad.t, 0, pad.t+cH);
+  grad.addColorStop(0, color.replace(")", ",0.3)").replace("rgb","rgba"));
+  grad.addColorStop(1, color.replace(")", ",0)").replace("rgb","rgba"));
+  ctx.beginPath();
+  data.forEach(function(d,i){
+    var x = pad.l + (i/(data.length-1))*cW;
+    var y = pad.t + cH - ((d.v-minV)/(maxV-minV))*cH;
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  });
+  ctx.lineTo(pad.l+cW, pad.t+cH); ctx.lineTo(pad.l, pad.t+cH); ctx.closePath();
+  ctx.fillStyle = grad; ctx.fill();
+  ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.lineJoin = "round";
+  data.forEach(function(d,i){
+    var x = pad.l + (i/(data.length-1))*cW;
+    var y = pad.t + cH - ((d.v-minV)/(maxV-minV))*cH;
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+  data.forEach(function(d,i){
+    var x = pad.l + (i/(data.length-1))*cW;
+    var y = pad.t + cH - ((d.v-minV)/(maxV-minV))*cH;
+    ctx.beginPath(); ctx.arc(x,y,3,0,Math.PI*2);
+    ctx.fillStyle = color; ctx.fill();
+    if(i === data.length-1) {
+      ctx.fillStyle = color; ctx.font = "bold 10px system-ui"; ctx.textAlign = "center";
+      ctx.fillText(d.v+" lbs", x, y-8);
+    }
+  });
+  ctx.fillStyle = "#3e6474"; ctx.font = "9px system-ui"; ctx.textAlign = "center";
+  ctx.fillText(data[0].d.slice(5), pad.l, H-4);
+  ctx.fillText(data[data.length-1].d.slice(5), W-pad.r, H-4);
+}
+
+function selectProgressExercise(ex) {
+  state.selectedProgressExercise = ex;
+  renderMain();
+}
+
 function renderProgress() {
   var a = getActive();
   if(!a) return '<div class="empty"><span style="font-size:36px;display:block;margin-bottom:10px">👆</span>Select a client first</div>';
@@ -1375,6 +1441,40 @@ function renderProgress() {
     +'<div style="font-size:10px;color:var(--muted);margin-top:2px">Nutrition ('+nutritionAdh.completed+'/'+nutritionAdh.total+' days logged)</div>'
     +'</div>';
   html += '</div></div>';
+
+  var exMap = {};
+  state.cLogs.slice().reverse().forEach(function(l){
+    if(!l.exercise || !l.weight || +l.weight===0) return;
+    if(!exMap[l.exercise]) exMap[l.exercise] = [];
+    var existing = exMap[l.exercise].filter(function(e){ return e.d===l.date; })[0];
+    if(!existing || +l.weight > existing.v) {
+      exMap[l.exercise] = exMap[l.exercise].filter(function(e){ return e.d!==l.date; });
+      exMap[l.exercise].push({d:l.date, v:+l.weight});
+    }
+  });
+  var exList = Object.keys(exMap).filter(function(k){ return exMap[k].length>=2; }).sort();
+  if(exList.length) {
+    var activeEx = (state.selectedProgressExercise && exMap[state.selectedProgressExercise]) ? state.selectedProgressExercise : exList[0];
+    var chartData = exMap[activeEx];
+    var firstPt = chartData[0], lastPt = chartData[chartData.length-1];
+    var gain = (lastPt.v - firstPt.v).toFixed(1);
+    html += '<div class="card"><div class="clbl">Strength Progress</div>';
+    html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">';
+    exList.forEach(function(ex){
+      var isActive = ex===activeEx;
+      html += '<button onclick="selectProgressExercise(\''+ex.replace(/'/g,"\\'")+'\')" style="background:'+(isActive?"var(--teal3)":"var(--s2)")+';border:1px solid '+(isActive?"var(--teal)":"var(--b1)")+';color:'+(isActive?"var(--teal2)":"var(--muted)")+';border-radius:6px;padding:5px 10px;font-family:Barlow Condensed;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap">'+esc(ex)+'</button>';
+    });
+    html += '</div>';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;background:var(--s2);border-radius:8px;padding:10px 12px">'
+      + '<div><div style="font-size:11px;color:var(--muted)">Started at</div><div style="font-family:Barlow Condensed;font-size:18px;font-weight:700">'+firstPt.v+' lbs</div></div>'
+      + '<div style="text-align:center"><div style="font-family:Barlow Condensed;font-size:22px;font-weight:700;color:'+(gain>=0?"var(--green)":"var(--red)")+'">'+(gain>0?"+":"")+gain+' lbs</div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">Total Gain</div></div>'
+      + '<div style="text-align:right"><div style="font-size:11px;color:var(--muted)">Current PR</div><div style="font-family:Barlow Condensed;font-size:18px;font-weight:700;color:var(--teal2)">'+lastPt.v+' lbs</div></div>'
+      + '</div>';
+    html += '<canvas id="trainerStrengthChart" style="width:100%;height:120px;display:block"></canvas>';
+    html += '</div>';
+    setTimeout(function(){ drawLineChart("trainerStrengthChart", chartData, CHART_COLORS[0]); }, 50);
+  }
+
   if(a.calories > 0) {
     html += '<div class="card"><div class="clbl">Assigned Macros</div>'
       +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center">';
@@ -1767,6 +1867,7 @@ async function loadClientData(id) {
 async function selectClient(id) {
   state.activeId = id;
   state.view = "log";
+  state.selectedProgressExercise = null;
   closeSheet("pickerSheet");
   renderNav();
   document.getElementById("mainScroll").innerHTML = '<div class="empty">Loading…</div>';
@@ -3315,3 +3416,4 @@ showLoginOverlay();
 </script>
 </body>
 </html>
+
