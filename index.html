@@ -1521,9 +1521,12 @@ function renderProgress() {
       var nxt = state.cProg[i+1];
       var d = nxt ? (p.weight-nxt.weight).toFixed(1) : null;
       var badge = d!==null ? '<span style="background:'+(+d<0?"rgba(45,186,128,0.15)":"rgba(224,82,82,0.15)")+';color:'+(+d<0?"var(--green)":"var(--red)")+';padding:2px 7px;border-radius:4px;font-family:Barlow Condensed;font-size:11px;font-weight:700">'+(+d>0?"+":"")+d+'</span>' : "";
+      var measureLine = [
+        p.waist?'Waist '+p.waist+'"':null, p.chest?'Chest '+p.chest+'"':null, p.arms?'Arms '+p.arms+'"':null, p.hips?'Hips '+p.hips+'"':null, p.thighs?'Thighs '+p.thighs+'"':null
+      ].filter(Boolean).join(" · ");
       html += '<div class="prow">'
         +'<div style="font-family:Barlow Condensed;font-size:11px;color:var(--gold);font-weight:700;width:80px;flex-shrink:0">'+p.date+'</div>'
-        +'<div style="flex:1"><div style="font-size:14px;font-weight:700;color:var(--teal2)">'+p.weight+' lbs</div>'+(p.body_fat?'<div style="font-size:11px;color:var(--muted)">'+p.body_fat+'% BF</div>':'')+'</div>'
+        +'<div style="flex:1"><div style="font-size:14px;font-weight:700;color:var(--teal2)">'+p.weight+' lbs</div>'+(p.body_fat?'<div style="font-size:11px;color:var(--muted)">'+p.body_fat+'% BF</div>':'')+(measureLine?'<div style="font-size:10px;color:var(--muted);margin-top:2px">'+measureLine+'</div>':'')+'</div>'
         +badge+'</div>';
     });
   }
@@ -1578,6 +1581,23 @@ function renderWorkoutHeatmap(logs) {
   return html;
 }
 
+function getMilestonesTrainer() {
+  var uniqueDates = Array.from(new Set(state.cLogs.map(function(l){ return l.date; }))).length;
+  var hasPR = state.cLogs.some(function(l){ return +l.weight>0; });
+  var maxStreak = 0;
+  state.habits.forEach(function(h){ maxStreak = Math.max(maxStreak, getHabitStreak(h.id)); });
+  return [
+    {icon:"🏋️", label:"First Workout", earned: state.cLogs.length>0},
+    {icon:"🥉", label:"10 Workouts", earned: uniqueDates>=10},
+    {icon:"🥈", label:"50 Workouts", earned: uniqueDates>=50},
+    {icon:"🥇", label:"100 Workouts", earned: uniqueDates>=100},
+    {icon:"💪", label:"First PR", earned: hasPR},
+    {icon:"🔥", label:"7-Day Streak", earned: maxStreak>=7},
+    {icon:"🔥🔥", label:"30-Day Streak", earned: maxStreak>=30},
+    {icon:"📸", label:"Progress Photo", earned: state.progressPhotos.length>0}
+  ];
+}
+
 function renderStats() {
   var a = getActive();
   if(!a) return '<div class="empty"><span style="font-size:36px;display:block;margin-bottom:10px">👆</span>Select a client first</div>';
@@ -1590,6 +1610,11 @@ function renderStats() {
   html += '<button class="chip" style="cursor:pointer;color:var(--teal2);background:var(--teal3)" onclick="openSheet(\'editClientSheet\')">✏️ Edit</button>';
   html += '<button class="chip t" style="cursor:pointer" onclick="openSheet(\'shareSheet\')">📤 Share</button>';
   html += '</div>';
+  html += '<div class="card"><div class="clbl">Milestones</div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">'
+    + getMilestonesTrainer().map(function(m){
+        return '<div title="'+m.label+'" style="text-align:center;opacity:'+(m.earned?"1":"0.3")+'"><div style="font-size:26px">'+m.icon+'</div><div style="font-size:8px;color:'+(m.earned?"var(--gold)":"var(--muted)")+';margin-top:2px;line-height:1.2">'+m.label+'</div></div>';
+      }).join("")
+    + '</div></div>';
   html += '<div class="card"><div class="clbl">All-Time Volume</div><div style="text-align:center;padding:8px 0">'
     +'<div style="font-family:Barlow Condensed;font-size:48px;font-weight:900;color:var(--teal2);line-height:1">'+(allVol>0?allVol.toLocaleString():"—")+'</div>'
     +'<div style="font-family:Barlow Condensed;font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-top:3px">Total lbs moved</div>'
@@ -3416,4 +3441,3 @@ showLoginOverlay();
 </script>
 </body>
 </html>
-
