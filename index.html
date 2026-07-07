@@ -1324,10 +1324,57 @@ async function deleteProgressPhotoById(id, photoUrl) {
   } catch(e) { showToast("Could not delete photo"); }
 }
 
+function getWorkoutAdherence(days) {
+  days = days || 30;
+  var today = tod();
+  var windowStart = new Date(today+"T12:00:00"); windowStart.setDate(windowStart.getDate()-days);
+  var windowStartStr = windowStart.toISOString().slice(0,10);
+  var assignedDates = (state.datedPlans||[]).filter(function(p){ return p.date >= windowStartStr && p.date <= today; }).map(function(p){ return p.date; });
+  var uniqueAssigned = Array.from(new Set(assignedDates));
+  if(!uniqueAssigned.length) return null;
+  var loggedDates = {}; (state.cLogs||[]).forEach(function(l){ loggedDates[l.date] = true; });
+  var completed = uniqueAssigned.filter(function(d){ return loggedDates[d]; }).length;
+  return { completed: completed, total: uniqueAssigned.length, pct: Math.round((completed/uniqueAssigned.length)*100) };
+}
+
+function getNutritionAdherence(days) {
+  days = days || 30;
+  var today = tod();
+  var windowStart = new Date(today+"T12:00:00"); windowStart.setDate(windowStart.getDate()-days);
+  var windowStartStr = windowStart.toISOString().slice(0,10);
+  var loggedDatesSet = {};
+  (state.nLogs||[]).forEach(function(l){ if(l.date >= windowStartStr && l.date <= today) loggedDatesSet[l.date] = true; });
+  var completed = Object.keys(loggedDatesSet).length;
+  return { completed: completed, total: days, pct: Math.round((completed/days)*100) };
+}
+
+function adherenceColor(pct) {
+  if(pct >= 80) return "var(--green)";
+  if(pct >= 50) return "var(--gold)";
+  return "var(--red)";
+}
+
 function renderProgress() {
   var a = getActive();
   if(!a) return '<div class="empty"><span style="font-size:36px;display:block;margin-bottom:10px">👆</span>Select a client first</div>';
   var html = clientBanner();
+  var workoutAdh = getWorkoutAdherence(30);
+  var nutritionAdh = getNutritionAdherence(30);
+  html += '<div class="card"><div class="clbl">Adherence (Last 30 Days)</div>';
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+  if(workoutAdh) {
+    html += '<div style="background:var(--bg);border:1px solid var(--b1);border-radius:7px;padding:12px 8px;text-align:center">'
+      +'<div style="font-family:Barlow Condensed;font-size:26px;font-weight:900;color:'+adherenceColor(workoutAdh.pct)+'">'+workoutAdh.pct+'%</div>'
+      +'<div style="font-size:10px;color:var(--muted);margin-top:2px">Workouts ('+workoutAdh.completed+'/'+workoutAdh.total+' assigned)</div>'
+      +'</div>';
+  } else {
+    html += '<div style="background:var(--bg);border:1px solid var(--b1);border-radius:7px;padding:12px 8px;text-align:center;color:var(--muted);font-size:11px">No workouts assigned yet</div>';
+  }
+  html += '<div style="background:var(--bg);border:1px solid var(--b1);border-radius:7px;padding:12px 8px;text-align:center">'
+    +'<div style="font-family:Barlow Condensed;font-size:26px;font-weight:900;color:'+adherenceColor(nutritionAdh.pct)+'">'+nutritionAdh.pct+'%</div>'
+    +'<div style="font-size:10px;color:var(--muted);margin-top:2px">Nutrition ('+nutritionAdh.completed+'/'+nutritionAdh.total+' days logged)</div>'
+    +'</div>';
+  html += '</div></div>';
   if(a.calories > 0) {
     html += '<div class="card"><div class="clbl">Assigned Macros</div>'
       +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center">';
@@ -1385,6 +1432,52 @@ function renderProgress() {
 }
 
 // STATS VIEW
+function renderWorkoutHeatmap(logs) {
+  var volByDate = {}, hasLogByDate = {};
+  logs.forEach(function(l){
+    var vol = (+l.sets||1)*(+l.reps||0)*(+l.weight||0);
+    volByDate[l.date] = (volByDate[l.date]||0) + vol;
+    hasLogByDate[l.date] = true;
+  });
+  var todayD = new Date(tod()+"T12:00:00");
+  var DAYS = 84;
+  var endDow = todayD.getDay();
+  var totalCells = Math.ceil((DAYS+endDow)/7)*7;
+  var cells = [];
+  for(var i=totalCells-1;i>=0;i--){
+    var d = new Date(todayD); d.setDate(d.getDate()-i);
+    var iso = d.toISOString().slice(0,10);
+    cells.push({date:iso, active: !!hasLogByDate[iso], vol: volByDate[iso]||0});
+  }
+  var maxVol = Math.max.apply(null, [1].concat(cells.map(function(c){return c.vol;})));
+  var weeks = [];
+  for(var w=0;w<cells.length;w+=7) weeks.push(cells.slice(w,w+7));
+  function colorFor(c){
+    if(!c.active) return "var(--s1)";
+    var ratio = c.vol/maxVol;
+    if(ratio>0.66) return "var(--teal)";
+    if(ratio>0.33) return "rgba(27,136,153,0.6)";
+    return "rgba(27,136,153,0.35)";
+  }
+  var html = '<div style="display:flex;gap:3px;overflow-x:auto;padding-bottom:6px">';
+  weeks.forEach(function(week){
+    html += '<div style="display:flex;flex-direction:column;gap:3px;flex-shrink:0">';
+    week.forEach(function(c){
+      html += '<div title="'+c.date+'" style="width:11px;height:11px;border-radius:2px;background:'+colorFor(c)+'"></div>';
+    });
+    html += '</div>';
+  });
+  html += '</div>';
+  html += '<div style="display:flex;align-items:center;gap:5px;margin-top:6px;font-size:9px;color:var(--muted)">'
+    + '<span>Less</span>'
+    + '<div style="width:10px;height:10px;border-radius:2px;background:var(--s1)"></div>'
+    + '<div style="width:10px;height:10px;border-radius:2px;background:rgba(27,136,153,0.35)"></div>'
+    + '<div style="width:10px;height:10px;border-radius:2px;background:rgba(27,136,153,0.6)"></div>'
+    + '<div style="width:10px;height:10px;border-radius:2px;background:var(--teal)"></div>'
+    + '<span>More</span></div>';
+  return html;
+}
+
 function renderStats() {
   var a = getActive();
   if(!a) return '<div class="empty"><span style="font-size:36px;display:block;margin-bottom:10px">👆</span>Select a client first</div>';
@@ -1401,6 +1494,7 @@ function renderStats() {
     +'<div style="font-family:Barlow Condensed;font-size:48px;font-weight:900;color:var(--teal2);line-height:1">'+(allVol>0?allVol.toLocaleString():"—")+'</div>'
     +'<div style="font-family:Barlow Condensed;font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-top:3px">Total lbs moved</div>'
     +'</div></div>';
+  html += '<div class="card"><div class="clbl">Workout Consistency</div>' + renderWorkoutHeatmap(state.cLogs) + '</div>';
   
   html += '<div class="srow">'
     +'<div class="sbox"><div class="sv">'+state.cLogs.length+'</div><div class="slbl">Exercises</div></div>'
