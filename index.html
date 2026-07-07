@@ -351,6 +351,19 @@ body{font-family:'Barlow',sans-serif;color:var(--txt)}
   </div>
 </div>
 
+<div class="overlay" id="shareResourceSheet">
+  <div class="sheet">
+    <div class="hdl"></div>
+    <div class="stitle">Share File</div>
+    <div id="shareResName" style="font-family:Barlow Condensed;font-size:13px;color:var(--teal2);letter-spacing:1px;margin-bottom:14px"></div>
+    <input type="hidden" id="shareResLibId"/>
+    <div style="font-family:Barlow Condensed;font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;font-weight:700;margin-bottom:6px">Select Clients</div>
+    <div id="shareResClientList" style="max-height:280px;overflow-y:auto;margin-bottom:12px"></div>
+    <button class="bp" onclick="confirmShareResource()">Save Sharing</button>
+    <button class="bg_" onclick="closeSheet('shareResourceSheet')">Cancel</button>
+  </div>
+</div>
+
 <div class="overlay" id="logExSheet">
   <div class="sheet">
     <div class="hdl"></div>
@@ -682,10 +695,12 @@ function clientBanner() {
 // CLIENTS VIEW
 function renderClients() {
   if(state.clientsSubView === "calendar") return renderMasterCalendar();
+  if(state.clientsSubView === "library") return renderResourceLibrary();
   var fC = state.clients.filter(function(c){ return c.name.toLowerCase().includes(state.srch.toLowerCase()); });
   var html = myProgramWidget();
-  html += '<div style="display:flex;justify-content:flex-end;margin-bottom:10px">';
+  html += '<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:10px">';
   html += '<button class="chip" style="cursor:pointer;color:var(--teal2);background:var(--teal3)" onclick="setClientsSubView(\'calendar\')">📅 Master Calendar</button>';
+  html += '<button class="chip" style="cursor:pointer;color:var(--gold)" onclick="setClientsSubView(\'library\')">📚 Library</button>';
   html += '</div>';
   html += '<div class="imp-banner" onclick="document.getElementById(\'gtFile\').click()">'
     +'<span style="font-size:24px;flex-shrink:0">📥</span>'
@@ -3060,6 +3075,151 @@ function setClientsSubView(v) {
   state.clientsSubView = v;
   if(v === "calendar" && state.tidycalStatus === "loading") loadTidyCalBookings();
   renderMain();
+}
+
+// ── RESOURCE LIBRARY MODULE ──
+state.pdfLibrary = [];
+state.resourceShares = [];
+state.signedResourceUrls = {};
+
+async function loadResourceLibrary() {
+  try {
+    var results = await Promise.all([
+      api("pdf_library?order=created_at.desc"),
+      api("resource_shares?select=id,library_id,client_id")
+    ]);
+    state.pdfLibrary = results[0] || [];
+    state.resourceShares = results[1] || [];
+    if(state.clientsSubView === "library") renderMain();
+  } catch(e) { /* non-fatal */ }
+}
+loadResourceLibrary();
+
+async function uploadLibraryFile(file) {
+  if(!file) return;
+  var validTypes = ["application/pdf","application/vnd.openxmlformats-officedocument.wordprocessingml.document","application/msword"];
+  var ext = (file.name.split(".").pop()||"").toLowerCase();
+  if(validTypes.indexOf(file.type)===-1 && ext!=="pdf" && ext!=="doc" && ext!=="docx") { showToast("Only PDF or Word files allowed"); return; }
+  var fileType = ext==="pdf" ? "pdf" : "docx";
+  var path = "library/" + Date.now() + "-" + file.name.replace(/[^a-zA-Z0-9._-]/g,"_");
+  showToast("Uploading…");
+  try {
+    var res = await fetch(SUPA+"/storage/v1/object/client-resources/"+path, {
+      method: "POST",
+      headers: { "apikey":KEY, "Authorization":"Bearer "+KEY, "Content-Type": file.type || "application/octet-stream" },
+      body: file
+    });
+    if(!res.ok) throw new Error("Upload failed");
+    var displayName = file.name.replace(/\.[^.]+$/,"");
+    var saved = await api("pdf_library", { method:"POST", body: JSON.stringify({ name: displayName, file_path: path, file_type: fileType }) });
+    state.pdfLibrary.unshift(saved[0]);
+    showToast("Uploaded ✓");
+    renderMain();
+  } catch(e) { showToast("Could not upload file"); }
+}
+
+async function getSignedResourceUrl(path) {
+  try {
+    var res = await fetch(SUPA+"/storage/v1/object/sign/client-resources/"+path, {
+      method: "POST",
+      headers: {"apikey":KEY,"Authorization":"Bearer "+KEY,"Content-Type":"application/json"},
+      body: JSON.stringify({ expiresIn: 3600 })
+    });
+    if(!res.ok) return null;
+    var data = await res.json();
+    return SUPA+"/storage/v1"+data.signedURL;
+  } catch(e) { return null; }
+}
+
+async function openLibraryFile(id, path) {
+  var url = state.signedResourceUrls[id];
+  if(!url) {
+    url = await getSignedResourceUrl(path);
+    if(!url) { showToast("Could not open file"); return; }
+    state.signedResourceUrls[id] = url;
+  }
+  window.open(url, "_blank");
+}
+
+async function deleteLibraryFile(id, path) {
+  if(!confirm("Delete this file? It will be removed for every client it was shared with.")) return;
+  try {
+    await api("pdf_library?id=eq."+id, { method:"DELETE" });
+    await fetch(SUPA+"/storage/v1/object/client-resources/"+path, { method:"DELETE", headers:{"apikey":KEY,"Authorization":"Bearer "+KEY} });
+    state.pdfLibrary = state.pdfLibrary.filter(function(f){ return f.id !== id; });
+    state.resourceShares = state.resourceShares.filter(function(s){ return s.library_id !== id; });
+    renderMain();
+  } catch(e) { showToast("Could not delete file"); }
+}
+
+function getResourceShareClients(libraryId) {
+  var ids = state.resourceShares.filter(function(s){ return s.library_id === libraryId; }).map(function(s){ return s.client_id; });
+  return state.clients.filter(function(c){ return ids.indexOf(c.id) > -1; });
+}
+
+function openShareResourceSheet(libraryId) {
+  var item = state.pdfLibrary.find(function(f){ return f.id === libraryId; });
+  if(!item) return;
+  document.getElementById("shareResLibId").value = libraryId;
+  document.getElementById("shareResName").textContent = item.name;
+  var sharedIds = state.resourceShares.filter(function(s){ return s.library_id === libraryId; }).map(function(s){ return s.client_id; });
+  var list = document.getElementById("shareResClientList");
+  list.innerHTML = state.clients.map(function(c){
+    var checked = sharedIds.indexOf(c.id) > -1 ? "checked" : "";
+    return "<label style=\"display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--b1);font-size:13px;cursor:pointer\"><input type=\"checkbox\" class=\"share-res-cb\" value=\""+c.id+"\" "+checked+" style=\"width:16px;height:16px\"/>"+esc(c.name)+"</label>";
+  }).join("");
+  openSheet("shareResourceSheet");
+}
+
+async function confirmShareResource() {
+  var libraryId = document.getElementById("shareResLibId").value;
+  var checked = Array.prototype.slice.call(document.querySelectorAll(".share-res-cb:checked")).map(function(cb){ return cb.value; });
+  var existing = state.resourceShares.filter(function(s){ return s.library_id === libraryId; }).map(function(s){ return s.client_id; });
+  var toAdd = checked.filter(function(id){ return existing.indexOf(id) === -1; });
+  var toRemove = existing.filter(function(id){ return checked.indexOf(id) === -1; });
+  try {
+    if(toAdd.length) {
+      var added = await api("resource_shares", { method:"POST", body: JSON.stringify(toAdd.map(function(cid){ return {library_id:libraryId, client_id:cid}; })) });
+      state.resourceShares = state.resourceShares.concat(added||[]);
+    }
+    for(var i=0;i<toRemove.length;i++){
+      await api("resource_shares?library_id=eq."+libraryId+"&client_id=eq."+toRemove[i], { method:"DELETE" });
+    }
+    if(toRemove.length) state.resourceShares = state.resourceShares.filter(function(s){ return !(s.library_id===libraryId && toRemove.indexOf(s.client_id)>-1); });
+    closeSheet("shareResourceSheet");
+    showToast("Sharing updated ✓");
+    renderMain();
+  } catch(e) { showToast("Could not update sharing"); }
+}
+
+function renderResourceLibrary() {
+  var html = "<div style=\"display:flex;align-items:center;justify-content:space-between;margin-bottom:14px\">";
+  html += "<div style=\"display:flex;align-items:center;gap:10px\">";
+  html += "<button onclick=\"setClientsSubView('list')\" style=\"background:var(--s1);border:1px solid var(--b1);color:var(--txt);border-radius:8px;padding:8px 12px;cursor:pointer;font-size:14px\">←</button>";
+  html += "<div style=\"font-size:15px;font-weight:700\">Resource Library</div>";
+  html += "</div>";
+  html += "<button class=\"bgold\" style=\"width:auto;margin:0;padding:9px 14px\" onclick=\"document.getElementById('libFileInput').click()\">+ Upload</button>";
+  html += "<input type=\"file\" id=\"libFileInput\" accept=\".pdf,.doc,.docx\" style=\"display:none\" onchange=\"uploadLibraryFile(this.files[0]); this.value=''\">";
+  html += "</div>";
+  if(!state.pdfLibrary.length) {
+    html += "<div class=\"empty\"><span style=\"font-size:36px;display:block;margin-bottom:10px\">📚</span>No files uploaded yet<br><span style=\"font-size:11px\">Upload a PDF or Word doc, then share it with any client</span></div>";
+    return html;
+  }
+  state.pdfLibrary.forEach(function(f){
+    var sharedClients = getResourceShareClients(f.id);
+    html += "<div style=\"background:var(--s1);border:1px solid var(--b1);border-radius:10px;padding:12px 14px;margin-bottom:8px\">";
+    html += "<div style=\"display:flex;justify-content:space-between;align-items:center;gap:8px\">";
+    html += "<div onclick=\"openLibraryFile('"+f.id+"','"+f.file_path+"')\" style=\"cursor:pointer;flex:1;min-width:0\">";
+    html += "<div style=\"font-size:14px;font-weight:700\">"+(f.file_type==="pdf"?"📄":"📝")+" "+esc(f.name)+"</div>";
+    html += "<div style=\"font-size:11px;color:var(--muted);margin-top:2px\">"+f.file_type.toUpperCase()+" · Shared with "+sharedClients.length+" client"+(sharedClients.length!==1?"s":"")+"</div>";
+    html += "</div></div>";
+    if(sharedClients.length) html += "<div style=\"font-size:10px;color:var(--teal2);margin-top:6px\">"+sharedClients.map(function(c){return esc(c.name);}).join(", ")+"</div>";
+    html += "<div style=\"display:flex;gap:6px;margin-top:10px\">";
+    html += "<button onclick=\"openShareResourceSheet('"+f.id+"')\" style=\"flex:1;background:var(--teal3);border:1px solid var(--teal);color:var(--teal2);border-radius:7px;padding:9px;font-family:Barlow Condensed;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:1px;text-transform:uppercase\">Share</button>";
+    html += "<button onclick=\"deleteLibraryFile('"+f.id+"','"+f.file_path+"')\" style=\"background:rgba(224,82,82,0.1);border:1px solid rgba(224,82,82,0.25);color:var(--red);border-radius:7px;padding:9px 14px;font-family:Barlow Condensed;font-size:12px;font-weight:700;cursor:pointer\">✕</button>";
+    html += "</div></div>";
+  });
+  return html;
 }
 
 function renderMasterCalendar() {
