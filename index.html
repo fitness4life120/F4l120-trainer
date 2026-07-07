@@ -306,6 +306,34 @@ body{font-family:'Barlow',sans-serif;color:var(--txt)}
   </div>
 </div>
 
+<div class="overlay" id="saveTemplateSheet">
+  <div class="sheet">
+    <div class="hdl"></div>
+    <div class="stitle">Save as Template</div>
+    <div class="f"><label>Template Name</label><input id="tpl_name" placeholder="e.g. 16-Week Progressive Overload"/></div>
+    <div class="fr2">
+      <div class="f"><label>From Date</label><input type="date" id="tpl_start"/></div>
+      <div class="f"><label>To Date</label><input type="date" id="tpl_end"/></div>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px">This captures every assigned day in that range as a reusable template — day 1 of the template will be whatever "From Date" is.</div>
+    <button class="bp" onclick="saveAsTemplate()">Save Template</button>
+    <button class="bg_" onclick="closeSheet('saveTemplateSheet')">Cancel</button>
+  </div>
+</div>
+
+<div class="overlay" id="assignTemplateSheet">
+  <div class="sheet">
+    <div class="hdl"></div>
+    <div class="stitle">Assign Template</div>
+    <div id="assignTplName" style="font-family:Barlow Condensed;font-size:13px;color:var(--teal2);letter-spacing:1px;margin-bottom:14px"></div>
+    <input type="hidden" id="assignTplId"/>
+    <div class="f"><label>Start Date</label><input type="date" id="assignTplDate"/></div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Day 1 of the template will be assigned to this date. Any date that already has a plan assigned will be skipped, not overwritten.</div>
+    <button class="bp" onclick="confirmAssignTemplate()">Assign</button>
+    <button class="bg_" onclick="closeSheet('assignTemplateSheet')">Cancel</button>
+  </div>
+</div>
+
 <div class="overlay" id="logExSheet">
   <div class="sheet">
     <div class="hdl"></div>
@@ -636,8 +664,13 @@ function clientBanner() {
 
 // CLIENTS VIEW
 function renderClients() {
+  if(state.clientsSubView === "calendar") return renderMasterCalendar();
   var fC = state.clients.filter(function(c){ return c.name.toLowerCase().includes(state.srch.toLowerCase()); });
-  var html = myProgramWidget() + '<div class="imp-banner" onclick="document.getElementById(\'gtFile\').click()">'
+  var html = myProgramWidget();
+  html += '<div style="display:flex;justify-content:flex-end;margin-bottom:10px">';
+  html += '<button class="chip" style="cursor:pointer;color:var(--teal2);background:var(--teal3)" onclick="setClientsSubView(\'calendar\')">📅 Master Calendar</button>';
+  html += '</div>';
+  html += '<div class="imp-banner" onclick="document.getElementById(\'gtFile\').click()">'
     +'<span style="font-size:24px;flex-shrink:0">📥</span>'
     +'<div style="flex:1"><div style="font-family:Barlow Condensed;font-size:13px;font-weight:800;letter-spacing:1px;color:var(--gold);text-transform:uppercase">Import from GymTrainer</div>'
     +'<div style="font-size:11px;color:var(--muted);margin-top:2px">Tap to select your GymTrainer backup JSON</div></div>'
@@ -1247,9 +1280,14 @@ async function addTrainer() {
 function renderPlans() {
   var a = getActive();
   if(!a) return '<div class="empty"><span style="font-size:36px;display:block;margin-bottom:10px">👆</span>Select a client first</div>';
+  if(state.plansSubView === "templates") return renderTemplates();
   var html = clientBanner();
-  html += '<div style="display:flex;justify-content:flex-end;margin-bottom:10px">';
+  html += '<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:10px">';
   html += '<button class="bgold" style="background:transparent" onclick="openNoteSheet()">📣 Send Note</button>';
+  html += '<button class="chip" style="cursor:pointer;color:var(--teal2);background:var(--teal3)" onclick="setPlansSubView(\'templates\')">📑 Templates</button>';
+  html += '</div>';
+  html += '<div style="display:flex;justify-content:flex-end;margin-bottom:10px">';
+  html += '<button class="chip" style="cursor:pointer;color:var(--gold)" onclick="openSaveTemplateSheet()">💾 Save as Template</button>';
   html += '</div>';
   html += '<div class="clbl">Workout Calendar</div>';
   html += renderTrainerCal();
@@ -1816,7 +1854,7 @@ async function loadClients() {
       : "clients?select=*&trainer_id=eq."+state.trainer.id+"&order=name.asc";
     var data = await api(url);
     state.clients = data;
-    api("dated_plans?select=client_id,date").then(function(rows){ state.allDatedPlansLite = rows||[]; renderNav(); renderMain(); }).catch(function(){});
+    api("dated_plans?select=client_id,date,label").then(function(rows){ state.allDatedPlansLite = rows||[]; renderNav(); renderMain(); }).catch(function(){});
     api("workout_logs?select=client_id,created_at&order=created_at.desc&limit=2000").then(function(rows){ state.allLogsLite = rows||[]; renderNav(); renderMain(); }).catch(function(){});
   } catch(e) { showToast("Could not connect to database"); }
   renderNav(); renderMain();
@@ -2856,6 +2894,229 @@ function renderMsgGroups() {
 }
 
 loadMessagingData();
+
+// ── PLAN TEMPLATES MODULE ──
+state.planTemplates = [];
+state.planTemplateDays = [];
+state.plansSubView = "calendar";
+state.tplSaveStart = null;
+state.tplSaveEnd = null;
+
+async function loadPlanTemplates() {
+  try {
+    var results = await Promise.all([
+      api("plan_templates?order=name.asc"),
+      api("plan_template_days?order=day_offset.asc")
+    ]);
+    state.planTemplates = results[0] || [];
+    state.planTemplateDays = results[1] || [];
+    if(state.view === "plans") renderMain();
+  } catch(e) { /* non-fatal */ }
+}
+loadPlanTemplates();
+
+// ── MASTER CALENDAR MODULE ──
+state.tidycalBookings = [];
+state.tidycalStatus = "loading"; // loading | ok | error
+state.clientsSubView = "list";
+
+var TIDYCAL_FN_URL = "https://superb-eclair-9ca7e8.netlify.app/.netlify/functions/tidycal-bookings";
+
+async function loadTidyCalBookings() {
+  state.tidycalStatus = "loading";
+  try {
+    var start = new Date(); start.setDate(start.getDate()-1);
+    var end = new Date(); end.setDate(end.getDate()+30);
+    var url = TIDYCAL_FN_URL + "?starts_at=" + start.toISOString().slice(0,10) + "&ends_at=" + end.toISOString().slice(0,10);
+    var res = await fetch(url);
+    if(!res.ok) { state.tidycalStatus = "error"; renderMain(); return; }
+    var data = await res.json();
+    state.tidycalBookings = data.data || [];
+    state.tidycalStatus = "ok";
+  } catch(e) { state.tidycalStatus = "error"; }
+  renderMain();
+}
+
+function setClientsSubView(v) {
+  state.clientsSubView = v;
+  if(v === "calendar" && state.tidycalStatus === "loading") loadTidyCalBookings();
+  renderMain();
+}
+
+function renderMasterCalendar() {
+  var html = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">';
+  html += '<button onclick="setClientsSubView(\'list\')" style="background:var(--s1);border:1px solid var(--b1);color:var(--txt);border-radius:8px;padding:8px 12px;cursor:pointer;font-size:14px">←</button>';
+  html += '<div style="font-size:15px;font-weight:700">Master Calendar</div>';
+  html += '</div>';
+
+  // Build a merged, date-grouped agenda for the next 30 days
+  var today = tod();
+  var byDate = {};
+  function ensureDate(d){ if(!byDate[d]) byDate[d] = { sessions: [], workouts: [] }; return byDate[d]; }
+
+  state.tidycalBookings.forEach(function(b){
+    var d = b.starts_at ? b.starts_at.slice(0,10) : null;
+    if(!d) return;
+    ensureDate(d).sessions.push(b);
+  });
+  state.allDatedPlansLite.forEach(function(p){
+    if(p.date < today) return;
+    var client = state.clients.find(function(c){ return c.id === p.client_id; });
+    ensureDate(p.date).workouts.push({ clientName: client ? client.name : "Unknown Client", label: p.label || "Workout" });
+  });
+
+  var dates = Object.keys(byDate).sort();
+
+  if(state.tidycalStatus === "error") {
+    html += '<div style="background:rgba(224,82,82,0.1);border:1px solid rgba(224,82,82,0.25);color:var(--red);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px">Could not load TidyCal sessions. Showing assigned workouts only.</div>';
+  } else if(state.tidycalStatus === "loading") {
+    html += '<div style="color:var(--muted);font-size:12px;font-style:italic;margin-bottom:12px">Loading TidyCal sessions…</div>';
+  }
+
+  if(!dates.length) {
+    html += '<div class="empty"><span style="font-size:36px;display:block;margin-bottom:10px">📅</span>Nothing scheduled in the next 30 days</div>';
+    return html;
+  }
+
+  dates.forEach(function(d){
+    var day = byDate[d];
+    if(!day.sessions.length && !day.workouts.length) return;
+    var dObj = new Date(d+"T12:00:00");
+    var dLabel = dObj.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"});
+    html += '<div class="dh"><span class="dl">'+dLabel+(d===today?" · Today":"")+'</span><div class="dline"></div><span class="dc">'+(day.sessions.length+day.workouts.length)+'</span></div>';
+    day.sessions.sort(function(a,b){ return a.starts_at.localeCompare(b.starts_at); }).forEach(function(s){
+      var timeStr = new Date(s.starts_at).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
+      html += '<div style="background:var(--teal3);border:1px solid var(--teal);border-left:3px solid var(--teal);border-radius:7px;padding:9px 12px;margin-bottom:5px">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px;font-weight:600;color:var(--teal2)">📅 '+esc(s.contact_name)+'</span><span style="font-size:11px;color:var(--teal2);font-weight:700">'+timeStr+'</span></div>'
+        + '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+esc(s.booking_type)+'</div>'
+        + '</div>';
+    });
+    day.workouts.forEach(function(w){
+      html += '<div style="background:var(--s1);border:1px solid var(--b1);border-left:3px solid var(--gold);border-radius:7px;padding:9px 12px;margin-bottom:5px">'
+        + '<span style="font-size:13px;font-weight:600">🏋️ '+esc(w.clientName)+'</span>'
+        + '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+esc(w.label)+'</div>'
+        + '</div>';
+    });
+  });
+  return html;
+}
+
+function getTemplateDays(templateId) {
+  return state.planTemplateDays.filter(function(d){ return d.template_id === templateId; }).sort(function(a,b){ return a.day_offset - b.day_offset; });
+}
+
+function setPlansSubView(v) { state.plansSubView = v; renderMain(); }
+
+function openSaveTemplateSheet() {
+  var a = getActive();
+  if(!a) return;
+  var clientDates = state.datedPlans.map(function(p){ return p.date; }).sort();
+  if(!clientDates.length) { showToast(a.name + " has no assigned days to save yet"); return; }
+  document.getElementById("tpl_name").value = "";
+  document.getElementById("tpl_start").value = clientDates[0];
+  document.getElementById("tpl_start").min = clientDates[0];
+  document.getElementById("tpl_start").max = clientDates[clientDates.length-1];
+  document.getElementById("tpl_end").value = clientDates[clientDates.length-1];
+  document.getElementById("tpl_end").min = clientDates[0];
+  document.getElementById("tpl_end").max = clientDates[clientDates.length-1];
+  openSheet("saveTemplateSheet");
+}
+
+async function saveAsTemplate() {
+  var name = document.getElementById("tpl_name").value.trim();
+  var start = document.getElementById("tpl_start").value;
+  var end = document.getElementById("tpl_end").value;
+  if(!name) { showToast("Name the template"); return; }
+  if(!start || !end || start > end) { showToast("Check your date range"); return; }
+  var daysInRange = state.datedPlans.filter(function(p){ return p.date >= start && p.date <= end; });
+  if(!daysInRange.length) { showToast("No assigned days in that range"); return; }
+  try {
+    var savedTpl = await api("plan_templates", { method:"POST", body: JSON.stringify({ name: name }) });
+    var templateId = savedTpl[0].id;
+    var startD = new Date(start+"T12:00:00");
+    var payload = daysInRange.map(function(p){
+      var offset = Math.round((new Date(p.date+"T12:00:00") - startD) / 86400000);
+      return { template_id: templateId, day_offset: offset, label: p.label || "", exercises: p.exercises || [] };
+    });
+    var savedDays = await api("plan_template_days", { method:"POST", body: JSON.stringify(payload) });
+    state.planTemplates.push(savedTpl[0]);
+    state.planTemplateDays = state.planTemplateDays.concat(savedDays||[]);
+    closeSheet("saveTemplateSheet");
+    showToast("Template saved ✓ ("+payload.length+" days)");
+    state.plansSubView = "templates";
+    renderMain();
+  } catch(e) { showToast("Could not save template"); }
+}
+
+async function deleteTemplate(id) {
+  if(!confirm("Delete this template? This won't affect any clients it's already been assigned to.")) return;
+  try {
+    await api("plan_templates?id=eq."+id, { method:"DELETE" });
+    state.planTemplates = state.planTemplates.filter(function(t){ return t.id !== id; });
+    state.planTemplateDays = state.planTemplateDays.filter(function(d){ return d.template_id !== id; });
+    renderMain();
+  } catch(e) { showToast("Could not delete template"); }
+}
+
+function openAssignTemplateSheet(templateId) {
+  var tpl = state.planTemplates.find(function(t){ return t.id === templateId; });
+  if(!tpl) return;
+  document.getElementById("assignTplId").value = templateId;
+  document.getElementById("assignTplName").textContent = tpl.name;
+  document.getElementById("assignTplDate").value = tod();
+  openSheet("assignTemplateSheet");
+}
+
+async function confirmAssignTemplate() {
+  var templateId = document.getElementById("assignTplId").value;
+  var startDate = document.getElementById("assignTplDate").value;
+  var a = getActive();
+  if(!a || !templateId || !startDate) return;
+  var days = getTemplateDays(templateId);
+  if(!days.length) { showToast("This template has no days"); return; }
+  var startD = new Date(startDate+"T12:00:00");
+  var existingDates = {}; state.datedPlans.forEach(function(p){ existingDates[p.date] = true; });
+  var toCreate = [];
+  var skipped = 0;
+  days.forEach(function(d){
+    var target = new Date(startD); target.setDate(target.getDate()+d.day_offset);
+    var iso = target.toISOString().slice(0,10);
+    if(existingDates[iso]) { skipped++; return; }
+    toCreate.push({ client_id: a.id, date: iso, label: d.label, exercises: d.exercises });
+  });
+  if(!toCreate.length) { showToast("All target dates already have plans assigned"); return; }
+  try {
+    var saved = await api("dated_plans", { method:"POST", body: JSON.stringify(toCreate) });
+    state.datedPlans = state.datedPlans.concat(saved||[]);
+    closeSheet("assignTemplateSheet");
+    showToast("Assigned "+toCreate.length+" day"+(toCreate.length!==1?"s":"")+(skipped?" ("+skipped+" skipped, already had a plan)":"")+" ✓");
+    state.plansSubView = "calendar";
+    renderMain();
+  } catch(e) { showToast("Could not assign template"); }
+}
+
+function renderTemplates() {
+  var html = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">';
+  html += '<button onclick="setPlansSubView(\'calendar\')" style="background:var(--s1);border:1px solid var(--b1);color:var(--txt);border-radius:8px;padding:8px 12px;cursor:pointer;font-size:14px">←</button>';
+  html += '<div style="font-size:15px;font-weight:700">Plan Templates</div>';
+  html += '</div>';
+  if(!state.planTemplates.length) {
+    html += '<div class="empty"><span style="font-size:36px;display:block;margin-bottom:10px">📑</span>No templates yet<br><span style="font-size:11px">Build a client\'s plan, then tap "Save as Template" from their Plans tab</span></div>';
+    return html;
+  }
+  state.planTemplates.forEach(function(t){
+    var days = getTemplateDays(t.id);
+    html += '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:10px;padding:12px 14px;margin-bottom:8px">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center">';
+    html += '<div><div style="font-size:14px;font-weight:700">'+esc(t.name)+'</div><div style="font-size:11px;color:var(--muted);margin-top:2px">'+days.length+' day'+(days.length!==1?"s":"")+' · spans '+(days.length?days[days.length-1].day_offset+1:0)+' calendar days</div></div>';
+    html += '</div>';
+    html += '<div style="display:flex;gap:6px;margin-top:10px">';
+    html += '<button onclick="openAssignTemplateSheet(\''+t.id+'\')" style="flex:1;background:var(--teal3);border:1px solid var(--teal);color:var(--teal2);border-radius:7px;padding:9px;font-family:Barlow Condensed;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:1px;text-transform:uppercase">Assign to '+esc((getActive()||{}).name||"client")+'</button>';
+    html += '<button onclick="deleteTemplate(\''+t.id+'\')" style="background:rgba(224,82,82,0.1);border:1px solid rgba(224,82,82,0.25);color:var(--red);border-radius:7px;padding:9px 14px;font-family:Barlow Condensed;font-size:12px;font-weight:700;cursor:pointer">✕</button>';
+    html += '</div></div>';
+  });
+  return html;
+}
 
 // ── LOGIN SYSTEM ──
 var pinValue = "";
