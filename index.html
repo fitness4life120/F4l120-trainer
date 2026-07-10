@@ -421,6 +421,7 @@ var state = {
   allDatedPlansLite: [],
   allLogsLite: [],
   waterLogs: [],
+  dailyCheckins: [],
   selectedProgressExercise: null,
   activeId: null,
   cLogs: [],
@@ -1653,6 +1654,24 @@ function renderProgress() {
   html += '</div>';
   var workoutAdh = getWorkoutAdherence(30);
   var nutritionAdh = getNutritionAdherence(30);
+  var MOODS_T = ["😞","😕","😐","🙂","😄"];
+  var ENERGY_T = ["🪫","🔋","🔋🔋","🔋🔋🔋","⚡"];
+  if(state.dailyCheckins.length) {
+    html += '<div class="card"><div class="clbl">Daily Check-Ins</div>';
+    state.dailyCheckins.forEach(function(c){
+      html += '<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--b1)">';
+      html += '<div style="font-family:Barlow Condensed;font-size:11px;color:var(--gold);font-weight:700;width:56px;flex-shrink:0">'+c.date.slice(5)+'</div>';
+      html += '<div style="flex:1;font-size:12px">';
+      var parts = [];
+      if(c.mood) parts.push(MOODS_T[c.mood-1]);
+      if(c.energy) parts.push(ENERGY_T[c.energy-1]);
+      if(c.sleep_hours) parts.push(c.sleep_hours+'h sleep');
+      html += parts.join('  ');
+      if(c.notes) html += '<div style="font-size:11px;color:var(--muted);font-style:italic;margin-top:2px">'+esc(c.notes)+'</div>';
+      html += '</div></div>';
+    });
+    html += '</div>';
+  }
   html += '<div class="card"><div class="clbl">Adherence (Last 30 Days)</div>';
   html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
   if(workoutAdh) {
@@ -2116,10 +2135,12 @@ async function loadClientData(id) {
       api("habits?client_id=eq."+id+"&order=created_at.asc"),
       api("habit_logs?client_id=eq."+id+"&order=date.desc"),
       api("progress_photos?client_id=eq."+id+"&order=date.desc"),
-      api("water_logs?client_id=eq."+id)
+      api("water_logs?client_id=eq."+id),
+      api("daily_checkins?client_id=eq."+id+"&order=date.desc&limit=14")
     ]);
     state.cLogs = results[0]; state.cProg = results[1]; state.cPlans = results[2]; state.datedPlans = results[3]||[]; state.nLogs = results[4]||[];
     state.habits = results[5]||[]; state.habitLogs = results[6]||[]; state.progressPhotos = results[7]||[]; state.waterLogs = results[8]||[];
+    state.dailyCheckins = results[9]||[];
     resolveProgressPhotoUrls().then(function(){ if(state.view === "progress") renderMain(); });
   } catch(e) { showToast("Error loading data"); }
 }
