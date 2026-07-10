@@ -295,6 +295,45 @@ body{font-family:'Barlow',sans-serif;color:var(--txt)}
   </div>
 </div>
 
+<div class="overlay" id="optionalWorkoutSheet">
+  <div class="sheet">
+    <div class="hdl"></div>
+    <div class="stitle" id="owSheetTitle">New Optional Workout</div>
+    <div id="owClientName" style="font-family:Barlow Condensed;font-size:11px;color:var(--teal2);letter-spacing:2px;text-transform:uppercase;margin-bottom:14px"></div>
+    <input type="hidden" id="ow_id"/>
+    <div class="f"><label>Workout Label</label><input id="ow_label" placeholder="e.g. Bonus Core Circuit, Optional Cardio"/></div>
+    <div class="sdiv"></div>
+    <div style="font-family:Barlow Condensed;font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;font-weight:700;margin-bottom:10px">Add Exercises</div>
+    <div class="f"><label>Exercise Name</label><input id="ow_exname" placeholder="e.g. Bench Press"/></div>
+    <div class="fr3">
+      <div class="f"><label>Sets</label><input type="number" id="ow_sets" placeholder="3" value="3"/></div>
+      <div class="f"><label id="ow_reps_label">Reps</label><input id="ow_reps" placeholder="10" value="10"/></div>
+      <div class="f"><label>Muscle</label>
+        <select id="ow_muscle">
+          <option>Chest</option><option>Back</option><option>Shoulders</option><option>Biceps</option><option>Triceps</option><option>Legs</option><option>Glutes</option><option>Core</option><option>Cardio</option><option>Full Body</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+      <div class="f"><label>Type</label>
+        <select id="ow_type" onchange="onOWTypeChange()">
+          <option value="reps">Reps</option>
+          <option value="time">Time (duration)</option>
+        </select>
+      </div>
+      <div class="f"><label>Rest</label><input id="ow_rest" placeholder="e.g. 60 sec"/></div>
+      <div class="f"><label>Target Weight</label><input type="number" inputmode="decimal" id="ow_weight" placeholder="e.g. 135"/></div>
+    </div>
+    <button class="bgold" id="owAddBtn" onclick="addOWExercise()">+ Add Exercise</button>
+    <div id="owCancelEditWrap" style="display:none;text-align:center;margin-top:6px">
+      <a href="javascript:void(0)" onclick="cancelOWEdit()" style="font-size:11px;color:var(--muted);text-decoration:underline">Cancel edit</a>
+    </div>
+    <div id="owExList" style="margin-top:8px"></div>
+    <button class="bp" onclick="saveOptionalWorkout()" style="margin-top:12px">Save Optional Workout</button>
+    <button class="bg_" onclick="closeSheet('optionalWorkoutSheet')">Cancel</button>
+  </div>
+</div>
+
 <div class="overlay" id="groupSheet">
   <div class="sheet">
     <div class="hdl"></div>
@@ -422,6 +461,8 @@ var state = {
   allLogsLite: [],
   waterLogs: [],
   dailyCheckins: [],
+  optionalWorkouts: [],
+  lastLibraryFolder: "",
   selectedProgressExercise: null,
   activeId: null,
   cLogs: [],
@@ -911,6 +952,175 @@ function onDPGroupChange() {
   }
 }
 
+var owExercises = [];
+var editingOWIndex = null;
+
+function onOWTypeChange() {
+  var type = document.getElementById("ow_type").value;
+  var lbl = document.getElementById("ow_reps_label");
+  var input = document.getElementById("ow_reps");
+  if(type === "time") {
+    lbl.textContent = "Duration";
+    input.placeholder = "e.g. 30 sec";
+    if(input.value === "10") input.value = "";
+  } else {
+    lbl.textContent = "Reps";
+    input.placeholder = "10";
+  }
+}
+
+function resetOWForm() {
+  document.getElementById("ow_exname").value = "";
+  document.getElementById("ow_sets").value = "3";
+  document.getElementById("ow_reps").value = "10";
+  document.getElementById("ow_type").value = "reps";
+  document.getElementById("ow_rest").value = "";
+  document.getElementById("ow_weight").value = "";
+  document.getElementById("ow_muscle").selectedIndex = 0;
+  onOWTypeChange();
+  editingOWIndex = null;
+  document.getElementById("owAddBtn").textContent = "+ Add Exercise";
+  document.getElementById("owCancelEditWrap").style.display = "none";
+}
+
+function cancelOWEdit() { resetOWForm(); }
+
+function editOWExercise(idx) {
+  var ex = owExercises[idx];
+  if(!ex) return;
+  document.getElementById("ow_exname").value = ex.name;
+  document.getElementById("ow_sets").value = ex.sets;
+  document.getElementById("ow_type").value = ex.type === "time" ? "time" : "reps";
+  onOWTypeChange();
+  document.getElementById("ow_reps").value = ex.reps;
+  document.getElementById("ow_rest").value = ex.rest || "";
+  document.getElementById("ow_weight").value = ex.weight || "";
+  var muscleSel = document.getElementById("ow_muscle");
+  for(var i=0;i<muscleSel.options.length;i++){ if(muscleSel.options[i].value === ex.muscle) muscleSel.selectedIndex = i; }
+  editingOWIndex = idx;
+  document.getElementById("owAddBtn").textContent = "Update Exercise";
+  document.getElementById("owCancelEditWrap").style.display = "block";
+}
+
+function addOWExercise() {
+  var name = document.getElementById("ow_exname") ? document.getElementById("ow_exname").value.trim() : "";
+  if(!name) return;
+  var type = document.getElementById("ow_type") ? document.getElementById("ow_type").value : "reps";
+  var newEx = {
+    name: name,
+    sets: +document.getElementById("ow_sets").value||3,
+    reps: document.getElementById("ow_reps").value||(type==="time"?"30 sec":"10"),
+    type: type,
+    rest: document.getElementById("ow_rest").value.trim() || "",
+    weight: document.getElementById("ow_weight").value.trim() || "",
+    muscle: document.getElementById("ow_muscle").value,
+    group: null
+  };
+  if(editingOWIndex !== null) {
+    owExercises[editingOWIndex] = newEx;
+  } else {
+    owExercises.push(newEx);
+  }
+  resetOWForm();
+  renderOWExList();
+}
+
+function renderOWExList() {
+  var el = document.getElementById("owExList");
+  if(!el) return;
+  el.innerHTML = owExercises.map(function(ex,i){
+    var isTime = ex.type === "time";
+    var repsLine = ex.sets+'×'+ex.reps+(ex.weight?' @ '+esc(ex.weight)+' lbs':'') + ' · '+esc(ex.muscle);
+    var restLine = ex.rest ? ' · Rest '+esc(ex.rest) : '';
+    return '<div data-owediti="'+i+'" class="ow-edit-row" style="cursor:pointer;background:var(--bg);border:1px solid var(--b1);border-left:3px solid var(--gold);border-radius:7px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:8px">'
+      +'<div style="flex:1"><div style="font-size:13px;font-weight:600">'+esc(ex.name)+(isTime?' <span style="font-size:9px;color:var(--gold);background:var(--gold2);border-radius:3px;padding:1px 5px;margin-left:4px">TIME</span>':'')+'</div>'
+      +'<div style="font-size:11px;color:var(--muted);margin-top:2px">'+repsLine+restLine+'</div></div>'
+      +'<button data-owdel="'+i+'" class="ow-del-btn" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:3px 6px">✕</button>'
+      +'</div>';
+  }).join("");
+  document.querySelectorAll(".ow-edit-row").forEach(function(row){
+    row.addEventListener("click", function(){ editOWExercise(+row.getAttribute("data-owediti")); });
+  });
+  document.querySelectorAll(".ow-del-btn").forEach(function(btn){
+    btn.addEventListener("click", function(e){
+      e.stopPropagation();
+      var idx = +btn.getAttribute("data-owdel");
+      owExercises.splice(idx,1);
+      if(editingOWIndex === idx) resetOWForm();
+      renderOWExList();
+    });
+  });
+}
+
+function openOptionalWorkoutSheet(existingId) {
+  var a = getActive(); if(!a) return;
+  var existing = existingId ? state.optionalWorkouts.find(function(w){return w.id===existingId;}) : null;
+  document.getElementById("ow_id").value = existingId || "";
+  document.getElementById("ow_label").value = existing ? existing.label||"" : "";
+  document.getElementById("owSheetTitle").textContent = existingId ? "Edit Optional Workout" : "New Optional Workout";
+  document.getElementById("owClientName").textContent = a.name;
+  owExercises = existing ? (existing.exercises||[]).slice() : [];
+  resetOWForm();
+  renderOWExList();
+  openSheet("optionalWorkoutSheet");
+}
+
+async function saveOptionalWorkout() {
+  var a = getActive(); if(!a) return;
+  var id = document.getElementById("ow_id").value;
+  var label = document.getElementById("ow_label").value.trim();
+  if(!label) { showToast("Name the workout"); return; }
+  if(!owExercises.length) { showToast("Add at least one exercise"); return; }
+  try {
+    if(id) {
+      await api("optional_workouts?id=eq."+id, { method:"PATCH", body: JSON.stringify({ label: label, exercises: owExercises }) });
+      var idx = state.optionalWorkouts.findIndex(function(w){return w.id===id;});
+      if(idx>-1) state.optionalWorkouts[idx] = { ...state.optionalWorkouts[idx], label: label, exercises: owExercises };
+    } else {
+      var saved = await api("optional_workouts", { method:"POST", body: JSON.stringify({ client_id: a.id, label: label, exercises: owExercises }) });
+      state.optionalWorkouts.push(saved[0]);
+    }
+    closeSheet("optionalWorkoutSheet");
+    showToast("Optional workout saved ✓");
+    renderMain();
+  } catch(e) { showToast("Could not save"); }
+}
+
+async function deleteOptionalWorkout(id) {
+  if(!confirm("Delete this optional workout?")) return;
+  try {
+    await api("optional_workouts?id=eq."+id, { method:"DELETE" });
+    state.optionalWorkouts = state.optionalWorkouts.filter(function(w){return w.id!==id;});
+    renderMain();
+  } catch(e) { showToast("Could not delete"); }
+}
+
+function renderOptionalWorkouts() {
+  var a = getActive();
+  var html = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">';
+  html += '<div style="display:flex;align-items:center;gap:10px">';
+  html += '<button onclick="setPlansSubView(\'calendar\')" style="background:var(--s1);border:1px solid var(--b1);color:var(--txt);border-radius:8px;padding:8px 12px;cursor:pointer;font-size:14px">←</button>';
+  html += '<div style="font-size:15px;font-weight:700">Optional Workouts</div>';
+  html += '</div>';
+  html += '<button class="bgold" style="width:auto;margin:0;padding:9px 14px" onclick="openOptionalWorkoutSheet(null)">+ New</button>';
+  html += '</div>';
+  html += '<div style="font-size:11px;color:var(--muted);margin-bottom:12px">These stay off '+esc(a?a.name:"the client")+'\'s calendar — a self-directed workout library they can browse and log anytime.</div>';
+  if(!state.optionalWorkouts.length) {
+    html += '<div class="empty"><span style="font-size:36px;display:block;margin-bottom:10px">🎯</span>No optional workouts yet</div>';
+    return html;
+  }
+  state.optionalWorkouts.forEach(function(w){
+    html += '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:10px;padding:12px 14px;margin-bottom:8px">';
+    html += '<div style="font-size:14px;font-weight:700">'+esc(w.label)+'</div>';
+    html += '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+(w.exercises||[]).length+' exercise'+((w.exercises||[]).length!==1?"s":"")+'</div>';
+    html += '<div style="display:flex;gap:6px;margin-top:10px">';
+    html += '<button onclick="openOptionalWorkoutSheet(\''+w.id+'\')" style="flex:1;background:var(--teal3);border:1px solid var(--teal);color:var(--teal2);border-radius:7px;padding:9px;font-family:Barlow Condensed;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:1px;text-transform:uppercase">Edit</button>';
+    html += '<button onclick="deleteOptionalWorkout(\''+w.id+'\')" style="background:rgba(224,82,82,0.1);border:1px solid rgba(224,82,82,0.25);color:var(--red);border-radius:7px;padding:9px 14px;font-family:Barlow Condensed;font-size:12px;font-weight:700;cursor:pointer">✕</button>';
+    html += '</div></div>';
+  });
+  return html;
+}
+
 function onDPTypeChange() {
   var type = document.getElementById("dp_type").value;
   var lbl = document.getElementById("dp_reps_label");
@@ -1315,10 +1525,12 @@ function renderPlans() {
   var a = getActive();
   if(!a) return '<div class="empty"><span style="font-size:36px;display:block;margin-bottom:10px">👆</span>Select a client first</div>';
   if(state.plansSubView === "templates") return renderTemplates();
+  if(state.plansSubView === "optional") return renderOptionalWorkouts();
   var html = clientBanner();
   html += '<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:10px">';
   html += '<button class="bgold" style="background:transparent" onclick="openNoteSheet()">📣 Send Note</button>';
   html += '<button class="chip" style="cursor:pointer;color:var(--teal2);background:var(--teal3)" onclick="setPlansSubView(\'templates\')">📑 Templates</button>';
+  html += '<button class="chip" style="cursor:pointer;color:var(--gold)" onclick="setPlansSubView(\'optional\')">🎯 Optional</button>';
   html += '</div>';
   html += '<div style="display:flex;justify-content:flex-end;margin-bottom:10px">';
   html += '<button class="chip" style="cursor:pointer;color:var(--gold)" onclick="openSaveTemplateSheet()">💾 Save as Template</button>';
@@ -2136,11 +2348,12 @@ async function loadClientData(id) {
       api("habit_logs?client_id=eq."+id+"&order=date.desc"),
       api("progress_photos?client_id=eq."+id+"&order=date.desc"),
       api("water_logs?client_id=eq."+id),
-      api("daily_checkins?client_id=eq."+id+"&order=date.desc&limit=14")
+      api("daily_checkins?client_id=eq."+id+"&order=date.desc&limit=14"),
+      api("optional_workouts?client_id=eq."+id+"&order=created_at.desc")
     ]);
     state.cLogs = results[0]; state.cProg = results[1]; state.cPlans = results[2]; state.datedPlans = results[3]||[]; state.nLogs = results[4]||[];
     state.habits = results[5]||[]; state.habitLogs = results[6]||[]; state.progressPhotos = results[7]||[]; state.waterLogs = results[8]||[];
-    state.dailyCheckins = results[9]||[];
+    state.dailyCheckins = results[9]||[]; state.optionalWorkouts = results[10]||[];
     resolveProgressPhotoUrls().then(function(){ if(state.view === "progress") renderMain(); });
   } catch(e) { showToast("Error loading data"); }
 }
@@ -3191,6 +3404,12 @@ async function uploadLibraryFile(file) {
   var ext = (file.name.split(".").pop()||"").toLowerCase();
   if(validTypes.indexOf(file.type)===-1 && ext!=="pdf" && ext!=="doc" && ext!=="docx") { showToast("Only PDF or Word files allowed"); return; }
   var fileType = ext==="pdf" ? "pdf" : "docx";
+  var existingFolders = Array.from(new Set(state.pdfLibrary.map(function(f){return f.folder;}).filter(Boolean)));
+  var folderHint = existingFolders.length ? " (existing: "+existingFolders.join(", ")+")" : "";
+  var folder = prompt("Folder name — optional, groups this file for easier browsing"+folderHint+":", state.lastLibraryFolder||"");
+  if(folder === null) return; // cancelled
+  folder = folder.trim() || null;
+  state.lastLibraryFolder = folder || "";
   var path = "library/" + Date.now() + "-" + file.name.replace(/[^a-zA-Z0-9._-]/g,"_");
   showToast("Uploading…");
   try {
@@ -3201,7 +3420,7 @@ async function uploadLibraryFile(file) {
     });
     if(!res.ok) throw new Error("Upload failed");
     var displayName = file.name.replace(/\.[^.]+$/,"");
-    var saved = await api("pdf_library", { method:"POST", body: JSON.stringify({ name: displayName, file_path: path, file_type: fileType }) });
+    var saved = await api("pdf_library", { method:"POST", body: JSON.stringify({ name: displayName, file_path: path, file_type: fileType, folder: folder }) });
     state.pdfLibrary.unshift(saved[0]);
     showToast("Uploaded ✓");
     renderMain();
@@ -3295,19 +3514,34 @@ function renderResourceLibrary() {
     html += "<div class=\"empty\"><span style=\"font-size:36px;display:block;margin-bottom:10px\">📚</span>No files uploaded yet<br><span style=\"font-size:11px\">Upload a PDF or Word doc, then share it with any client</span></div>";
     return html;
   }
+  var folderGroups = {};
+  var folderOrder = [];
   state.pdfLibrary.forEach(function(f){
-    var sharedClients = getResourceShareClients(f.id);
-    html += "<div style=\"background:var(--s1);border:1px solid var(--b1);border-radius:10px;padding:12px 14px;margin-bottom:8px\">";
-    html += "<div style=\"display:flex;justify-content:space-between;align-items:center;gap:8px\">";
-    html += "<div onclick=\"openLibraryFile('"+f.id+"','"+f.file_path+"')\" style=\"cursor:pointer;flex:1;min-width:0\">";
-    html += "<div style=\"font-size:14px;font-weight:700\">"+(f.file_type==="pdf"?"📄":"📝")+" "+esc(f.name)+"</div>";
-    html += "<div style=\"font-size:11px;color:var(--muted);margin-top:2px\">"+f.file_type.toUpperCase()+" · Shared with "+sharedClients.length+" client"+(sharedClients.length!==1?"s":"")+"</div>";
-    html += "</div></div>";
-    if(sharedClients.length) html += "<div style=\"font-size:10px;color:var(--teal2);margin-top:6px\">"+sharedClients.map(function(c){return esc(c.name);}).join(", ")+"</div>";
-    html += "<div style=\"display:flex;gap:6px;margin-top:10px\">";
-    html += "<button onclick=\"openShareResourceSheet('"+f.id+"')\" style=\"flex:1;background:var(--teal3);border:1px solid var(--teal);color:var(--teal2);border-radius:7px;padding:9px;font-family:Barlow Condensed;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:1px;text-transform:uppercase\">Share</button>";
-    html += "<button onclick=\"deleteLibraryFile('"+f.id+"','"+f.file_path+"')\" style=\"background:rgba(224,82,82,0.1);border:1px solid rgba(224,82,82,0.25);color:var(--red);border-radius:7px;padding:9px 14px;font-family:Barlow Condensed;font-size:12px;font-weight:700;cursor:pointer\">✕</button>";
-    html += "</div></div>";
+    var key = f.folder || "Uncategorized";
+    if(!folderGroups[key]) { folderGroups[key] = []; folderOrder.push(key); }
+    folderGroups[key].push(f);
+  });
+  folderOrder.sort(function(a,b){
+    if(a==="Uncategorized") return 1;
+    if(b==="Uncategorized") return -1;
+    return a.localeCompare(b);
+  });
+  folderOrder.forEach(function(folderName){
+    html += "<div style=\"font-family:Barlow Condensed;font-size:11px;color:var(--gold);letter-spacing:2px;text-transform:uppercase;font-weight:700;margin:14px 0 8px\">📁 "+esc(folderName)+"</div>";
+    folderGroups[folderName].forEach(function(f){
+      var sharedClients = getResourceShareClients(f.id);
+      html += "<div style=\"background:var(--s1);border:1px solid var(--b1);border-radius:10px;padding:12px 14px;margin-bottom:8px\">";
+      html += "<div style=\"display:flex;justify-content:space-between;align-items:center;gap:8px\">";
+      html += "<div onclick=\"openLibraryFile('"+f.id+"','"+f.file_path+"')\" style=\"cursor:pointer;flex:1;min-width:0\">";
+      html += "<div style=\"font-size:14px;font-weight:700\">"+(f.file_type==="pdf"?"📄":"📝")+" "+esc(f.name)+"</div>";
+      html += "<div style=\"font-size:11px;color:var(--muted);margin-top:2px\">"+f.file_type.toUpperCase()+" · Shared with "+sharedClients.length+" client"+(sharedClients.length!==1?"s":"")+"</div>";
+      html += "</div></div>";
+      if(sharedClients.length) html += "<div style=\"font-size:10px;color:var(--teal2);margin-top:6px\">"+sharedClients.map(function(c){return esc(c.name);}).join(", ")+"</div>";
+      html += "<div style=\"display:flex;gap:6px;margin-top:10px\">";
+      html += "<button onclick=\"openShareResourceSheet('"+f.id+"')\" style=\"flex:1;background:var(--teal3);border:1px solid var(--teal);color:var(--teal2);border-radius:7px;padding:9px;font-family:Barlow Condensed;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:1px;text-transform:uppercase\">Share</button>";
+      html += "<button onclick=\"deleteLibraryFile('"+f.id+"','"+f.file_path+"')\" style=\"background:rgba(224,82,82,0.1);border:1px solid rgba(224,82,82,0.25);color:var(--red);border-radius:7px;padding:9px 14px;font-family:Barlow Condensed;font-size:12px;font-weight:700;cursor:pointer\">✕</button>";
+      html += "</div></div>";
+    });
   });
   return html;
 }
