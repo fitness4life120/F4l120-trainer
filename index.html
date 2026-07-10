@@ -246,6 +246,14 @@ body{font-family:'Barlow',sans-serif;color:var(--txt)}
       <div class="f"><label>Fat (g)</label><input type="number" id="ec_fat" placeholder="55"/></div>
     </div>
     <div class="fr2" style="margin-bottom:0"><div class="f"><label>Body Fat % Goal</label><input type="number" id="ec_bfgoal" placeholder="15.0" step="0.1"/></div><div class="f"><label>Target Weight (lbs)</label><input type="number" id="ec_wtgoal" placeholder="175"/></div></div>
+    <div class="sdiv"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div>
+        <div style="font-size:13px;font-weight:700">Client Status</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:1px">Inactive clients are hidden from your main roster</div>
+      </div>
+      <button type="button" id="ec_active_toggle" onclick="toggleEditClientActive()" style="flex-shrink:0;background:var(--teal3);border:1px solid var(--teal);color:var(--teal2);border-radius:20px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;min-width:90px">Active</button>
+    </div>
     <button class="bp" id="saveEditClientBtn" onclick="saveEditClient()">Save Changes</button>
     <button class="bg_" onclick="closeSheet('editClientSheet')">Cancel</button>
   </div>
@@ -516,6 +524,7 @@ var state = {
   optionalWorkouts: [],
   lastLibraryFolder: "",
   viewingIntakeFormId: null,
+  showInactiveClients: false,
   selectedProgressExercise: null,
   activeId: null,
   cLogs: [],
@@ -793,7 +802,9 @@ function renderClients() {
   if(state.clientsSubView === "library") return renderResourceLibrary();
   if(state.clientsSubView === "forms") return renderIntakeForms();
   if(state.clientsSubView === "intakeResponses") return renderIntakeFormResponses();
-  var fC = state.clients.filter(function(c){ return c.name.toLowerCase().includes(state.srch.toLowerCase()); });
+  var inactiveCount = state.clients.filter(function(c){ return c.active === false; }).length;
+  var visibleClients = state.showInactiveClients ? state.clients : state.clients.filter(function(c){ return c.active !== false; });
+  var fC = visibleClients.filter(function(c){ return c.name.toLowerCase().includes(state.srch.toLowerCase()); });
   var html = myProgramWidget();
   html += '<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:10px;flex-wrap:wrap">';
   html += '<button class="chip" style="cursor:pointer;color:var(--teal2);background:var(--teal3)" onclick="setClientsSubView(\'calendar\')">📅 Master Calendar</button>';
@@ -820,7 +831,10 @@ function renderClients() {
     html += '</div>';
   }
   html += '<div class="sw"><span class="si">🔍</span><input placeholder="Search clients…" value="'+esc(state.srch)+'" oninput="state.srch=this.value;renderMain()"/></div>';
-  html += '<div style="font-family:Barlow Condensed;font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:10px">'+state.clients.length+' clients</div>';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
+  html += '<div style="font-family:Barlow Condensed;font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase">'+fC.length+' client'+(fC.length!==1?"s":"")+'</div>';
+  if(inactiveCount > 0) html += '<a href="javascript:void(0)" onclick="state.showInactiveClients=!state.showInactiveClients;renderMain()" style="font-size:11px;color:var(--teal2);text-decoration:underline">'+(state.showInactiveClients?"Hide":"Show")+' Inactive ('+inactiveCount+')</a>';
+  html += '</div>';
   if(fC.length === 0) {
     html += '<div class="empty"><span style="font-size:36px;display:block;margin-bottom:10px">👥</span>'+(state.clients.length===0?"No clients yet\nTap ＋ to add your first":"No results")+'</div>';
   } else {
@@ -830,12 +844,14 @@ function renderClients() {
       var expiringSoon = daysLeft !== null && daysLeft >= 0 && daysLeft <= 7;
       var daysQuiet = getDaysSinceLastLog(c.id);
       var isQuiet = quiet.some(function(qc){ return qc.id === c.id; });
+      var isInactive = c.active === false;
       var subLine = esc(c.goal||"No goal")+'  ·  PIN: '+(c.pin||"—");
       if(workoutsLeft !== null) subLine += '  ·  '+workoutsLeft+' workout'+(workoutsLeft!==1?"s":"")+' left';
-      html += '<div class="cc'+(state.activeId===c.id?" sel":"")+'" onclick="selectClient(\''+c.id+'\')">'
+      html += '<div class="cc'+(state.activeId===c.id?" sel":"")+'" onclick="selectClient(\''+c.id+'\')" style="'+(isInactive?"opacity:0.55":"")+'">'
         +'<div class="av">'+ini(c.name)+'</div>'
         +'<div style="flex:1;min-width:0">'
         +'<div style="display:flex;align-items:center;gap:6px"><span style="font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(c.name)+'</span>'
+        +(isInactive?'<span style="font-size:9px;color:var(--muted);background:var(--s1);border:1px solid var(--b1);border-radius:3px;padding:1px 5px;flex-shrink:0">INACTIVE</span>':'')
         +(expiringSoon?'<span style="font-size:9px;color:var(--gold);background:var(--gold2);border-radius:3px;padding:1px 5px;flex-shrink:0">⏰ '+(daysLeft===0?"today":daysLeft+"d")+'</span>':'')
         +(isQuiet?'<span style="font-size:9px;color:var(--muted);background:var(--s1);border:1px solid var(--b1);border-radius:3px;padding:1px 5px;flex-shrink:0">💤 '+(daysQuiet===null?"quiet":daysQuiet+"d")+'</span>':'')+'</div>'
         +'<div style="font-size:11px;color:var(--muted);margin-top:2px">'+subLine+'</div>'
@@ -2362,6 +2378,7 @@ function getDaysUntilProgramEnd(client) {
 
 function getExpiringSoonClients() {
   return state.clients.filter(function(c){
+    if(c.active === false) return false;
     var d = getDaysUntilProgramEnd(c);
     return d !== null && d >= 0 && d <= 7;
   });
@@ -2378,6 +2395,7 @@ function getDaysSinceLastLog(clientId) {
 function getQuietClients() {
   var QUIET_THRESHOLD_DAYS = 7;
   return state.clients.filter(function(c){
+    if(c.active === false) return false;
     var createdRecently = c.created_at && (new Date() - new Date(c.created_at)) < (QUIET_THRESHOLD_DAYS*86400000);
     if(createdRecently) return false; // don't flag brand-new clients who just haven't started yet
     var days = getDaysSinceLastLog(c.id);
@@ -2773,6 +2791,17 @@ function quickEditClient(e, id) {
   openEditClient();
 }
 
+var editClientActiveState = true;
+
+function toggleEditClientActive() {
+  editClientActiveState = !editClientActiveState;
+  var btn = document.getElementById("ec_active_toggle");
+  btn.textContent = editClientActiveState ? "Active" : "Inactive";
+  btn.style.background = editClientActiveState ? "var(--teal3)" : "var(--s1)";
+  btn.style.borderColor = editClientActiveState ? "var(--teal)" : "var(--b1)";
+  btn.style.color = editClientActiveState ? "var(--teal2)" : "var(--muted)";
+}
+
 function openEditClient() {
   var a = getActive(); if(!a) return;
   document.getElementById("ec_name").value = a.name || "";
@@ -2785,6 +2814,12 @@ function openEditClient() {
   document.getElementById("ec_bfgoal").value = a.bf_goal || "";
   document.getElementById("ec_wtgoal").value = a.wt_goal || "";
   document.getElementById("ec_program_end").value = a.program_end_date || "";
+  editClientActiveState = a.active !== false;
+  var btn = document.getElementById("ec_active_toggle");
+  btn.textContent = editClientActiveState ? "Active" : "Inactive";
+  btn.style.background = editClientActiveState ? "var(--teal3)" : "var(--s1)";
+  btn.style.borderColor = editClientActiveState ? "var(--teal)" : "var(--b1)";
+  btn.style.color = editClientActiveState ? "var(--teal2)" : "var(--muted)";
   openSheet("editClientSheet");
 }
 
@@ -2807,7 +2842,8 @@ async function saveEditClient() {
       fat:+document.getElementById("ec_fat").value||0,
       bf_goal:+document.getElementById("ec_bfgoal").value||null,
       wt_goal:+document.getElementById("ec_wtgoal").value||null,
-      program_end_date: document.getElementById("ec_program_end").value || null
+      program_end_date: document.getElementById("ec_program_end").value || null,
+      active: editClientActiveState
     })});
     var idx = state.clients.findIndex(function(c){return c.id===a.id;});
     if(idx !== -1) {
@@ -2821,6 +2857,7 @@ async function saveEditClient() {
       state.clients[idx].bf_goal = +document.getElementById("ec_bfgoal").value||null;
       state.clients[idx].wt_goal = +document.getElementById("ec_wtgoal").value||null;
       state.clients[idx].program_end_date = document.getElementById("ec_program_end").value || null;
+      state.clients[idx].active = editClientActiveState;
     }
     closeSheet("editClientSheet");
     showToast("Client updated");
@@ -3206,7 +3243,7 @@ function openGroupSheet(groupId) {
   document.getElementById("grp_name").value = group ? group.name : "";
   var members = groupId ? getGroupMembers(groupId) : [];
   var list = document.getElementById("grpClientList");
-  list.innerHTML = state.clients.map(function(c){
+  list.innerHTML = state.clients.filter(function(c){return c.active!==false;}).map(function(c){
     var checked = members.indexOf(c.id) > -1 ? "checked" : "";
     return '<label style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--b1);font-size:13px;cursor:pointer"><input type="checkbox" class="grp-client-cb" value="'+c.id+'" '+checked+' style="width:16px;height:16px"/>'+esc(c.name)+'</label>';
   }).join("");
@@ -3569,7 +3606,7 @@ function openShareIntakeFormSheet(formId) {
   document.getElementById("shareIntakeFormName").textContent = form.name;
   var sharedIds = state.intakeFormShares.filter(function(s){return s.form_id===formId;}).map(function(s){return s.client_id;});
   var list = document.getElementById("shareIntakeClientList");
-  list.innerHTML = state.clients.map(function(c){
+  list.innerHTML = state.clients.filter(function(c){return c.active!==false;}).map(function(c){
     var checked = sharedIds.indexOf(c.id) > -1 ? "checked" : "";
     return '<label style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--b1);font-size:13px;cursor:pointer"><input type="checkbox" class="share-intake-cb" value="'+c.id+'" '+checked+' style="width:16px;height:16px"/>'+esc(c.name)+'</label>';
   }).join("");
@@ -3751,7 +3788,7 @@ function openShareResourceSheet(libraryId) {
   document.getElementById("shareResName").textContent = item.name;
   var sharedIds = state.resourceShares.filter(function(s){ return s.library_id === libraryId; }).map(function(s){ return s.client_id; });
   var list = document.getElementById("shareResClientList");
-  list.innerHTML = state.clients.map(function(c){
+  list.innerHTML = state.clients.filter(function(c){return c.active!==false;}).map(function(c){
     var checked = sharedIds.indexOf(c.id) > -1 ? "checked" : "";
     return "<label style=\"display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--b1);font-size:13px;cursor:pointer\"><input type=\"checkbox\" class=\"share-res-cb\" value=\""+c.id+"\" "+checked+" style=\"width:16px;height:16px\"/>"+esc(c.name)+"</label>";
   }).join("");
@@ -3983,7 +4020,7 @@ function openBulkAssignSheet(templateId) {
   document.getElementById("bulkAssignTplName").textContent = tpl.name;
   document.getElementById("bulkAssignTplDate").value = tod();
   var list = document.getElementById("bulkAssignClientList");
-  list.innerHTML = state.clients.map(function(c){
+  list.innerHTML = state.clients.filter(function(c){return c.active!==false;}).map(function(c){
     return '<label style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--b1);font-size:13px;cursor:pointer"><input type="checkbox" class="bulk-assign-cb" value="'+c.id+'" style="width:16px;height:16px"/>'+esc(c.name)+'</label>';
   }).join("");
   openSheet("bulkAssignTemplateSheet");
