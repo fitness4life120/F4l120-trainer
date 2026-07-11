@@ -1324,9 +1324,11 @@ function renderDPExList() {
 }
 
 async function saveDatedPlan() {
-  var label = document.getElementById("dp_label").value.trim();
+  var label = document.getElementById("dp_label").value.trim() || "Workout";
   var existingId = document.getElementById("dp_id").value;
-  if(!label || !state.activeId || !state.selCalDate) return;
+  if(!state.activeId) { showToast("No client selected"); return; }
+  if(!state.selCalDate) { showToast("No date selected"); return; }
+  if(!dpExercises.length) { showToast("Add at least one exercise before saving"); return; }
   try {
     var payload = {client_id:state.activeId, date:state.selCalDate, label:label, exercises:dpExercises};
     if(existingId) {
