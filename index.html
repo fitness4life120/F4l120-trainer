@@ -525,6 +525,9 @@ var state = {
   lastLibraryFolder: "",
   viewingIntakeFormId: null,
   showInactiveClients: false,
+  completedCalMonth: new Date().getMonth(),
+  completedCalYear: new Date().getFullYear(),
+  completedCalSelDate: null,
   selectedProgressExercise: null,
   activeId: null,
   cLogs: [],
@@ -802,12 +805,14 @@ function renderClients() {
   if(state.clientsSubView === "library") return renderResourceLibrary();
   if(state.clientsSubView === "forms") return renderIntakeForms();
   if(state.clientsSubView === "intakeResponses") return renderIntakeFormResponses();
+  if(state.clientsSubView === "completed") return renderCompletedWorkoutsCalendar();
   var inactiveCount = state.clients.filter(function(c){ return c.active === false; }).length;
   var visibleClients = state.showInactiveClients ? state.clients : state.clients.filter(function(c){ return c.active !== false; });
   var fC = visibleClients.filter(function(c){ return c.name.toLowerCase().includes(state.srch.toLowerCase()); });
   var html = myProgramWidget();
   html += '<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:10px;flex-wrap:wrap">';
   html += '<button class="chip" style="cursor:pointer;color:var(--teal2);background:var(--teal3)" onclick="setClientsSubView(\'calendar\')">📅 Master Calendar</button>';
+  html += '<button class="chip" style="cursor:pointer;color:var(--green)" onclick="setClientsSubView(\'completed\')">🏋️ Completed Workouts</button>';
   html += '<button class="chip" style="cursor:pointer;color:var(--gold)" onclick="setClientsSubView(\'library\')">📚 Library</button>';
   html += '<button class="chip" style="cursor:pointer;color:var(--gold)" onclick="setClientsSubView(\'forms\')">📋 Forms</button>';
   html += '</div>';
@@ -2357,7 +2362,7 @@ async function loadClients() {
     var data = await api(url);
     state.clients = data;
     api("dated_plans?select=client_id,date,label").then(function(rows){ state.allDatedPlansLite = rows||[]; renderNav(); renderMain(); }).catch(function(){});
-    api("workout_logs?select=client_id,created_at&order=created_at.desc&limit=2000").then(function(rows){ state.allLogsLite = rows||[]; renderNav(); renderMain(); }).catch(function(){});
+    api("workout_logs?select=client_id,date,created_at&order=created_at.desc&limit=3000").then(function(rows){ state.allLogsLite = rows||[]; renderNav(); renderMain(); }).catch(function(){});
   } catch(e) { showToast("Could not connect to database"); }
   renderNav(); renderMain();
 }
@@ -3860,6 +3865,78 @@ function renderResourceLibrary() {
       html += "</div></div>";
     });
   });
+  return html;
+}
+
+function renderCompletedWorkoutsCalendar() {
+  var months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  var dayLabels = ["Su","Mo","Tu","We","Th","Fr","Sa"];
+  var m = state.completedCalMonth, y = state.completedCalYear;
+  var first = new Date(y,m,1).getDay();
+  var daysInMonth = new Date(y,m+1,0).getDate();
+  var today = tod();
+
+  // Build a map: date -> Set of client_ids who logged that day
+  var byDate = {};
+  state.allLogsLite.forEach(function(l){
+    if(!l.date) return;
+    if(!byDate[l.date]) byDate[l.date] = {};
+    byDate[l.date][l.client_id] = true;
+  });
+
+  var html = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">';
+  html += '<button onclick="setClientsSubView(\'list\')" style="background:var(--s1);border:1px solid var(--b1);color:var(--txt);border-radius:8px;padding:8px 12px;cursor:pointer;font-size:14px">←</button>';
+  html += '<div style="font-size:15px;font-weight:700">Completed Workouts</div>';
+  html += '</div>';
+  html += '<div style="font-size:11px;color:var(--muted);margin-bottom:12px">Shows the most recent ~3,000 logged sets across your roster — very old months may be incomplete.</div>';
+
+  html += '<div style="background:var(--s2);border:1px solid var(--b1);border-radius:10px;padding:14px;margin-bottom:12px">';
+  html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">';
+  html += '<button onclick="state.completedCalMonth--;if(state.completedCalMonth<0){state.completedCalMonth=11;state.completedCalYear--;}renderMain()" style="background:var(--bg);border:1px solid var(--b1);border-radius:6px;color:var(--txt);padding:6px 12px;cursor:pointer;font-size:14px">‹</button>';
+  html += '<div style="font-family:Barlow Condensed;font-size:16px;font-weight:800;color:var(--txt);letter-spacing:1px">'+months[m]+' '+y+'</div>';
+  html += '<button onclick="state.completedCalMonth++;if(state.completedCalMonth>11){state.completedCalMonth=0;state.completedCalYear++;}renderMain()" style="background:var(--bg);border:1px solid var(--b1);border-radius:6px;color:var(--txt);padding:6px 12px;cursor:pointer;font-size:14px">›</button>';
+  html += '</div>';
+
+  html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:4px">';
+  dayLabels.forEach(function(d){
+    html += '<div style="text-align:center;font-family:Barlow Condensed;font-size:10px;font-weight:700;color:var(--muted);letter-spacing:1px;padding:4px 0">'+d+'</div>';
+  });
+  html += '</div>';
+
+  html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px">';
+  for(var i=0;i<first;i++) html += '<div></div>';
+  for(var d=1; d<=daysInMonth; d++) {
+    var dateStr = y+'-'+(m+1<10?'0'+(m+1):(m+1))+'-'+(d<10?'0'+d:d);
+    var clientIds = byDate[dateStr] ? Object.keys(byDate[dateStr]) : [];
+    var count = clientIds.length;
+    var isToday = dateStr === today;
+    var isSel = state.completedCalSelDate === dateStr;
+    var bg = isSel ? 'var(--teal)' : isToday ? 'var(--teal3)' : count>0 ? 'var(--gold2)' : 'var(--bg)';
+    var border = isSel ? 'var(--teal)' : isToday ? 'var(--teal)' : count>0 ? 'rgba(201,168,76,0.3)' : 'var(--b1)';
+    var color = isSel ? '#fff' : isToday ? 'var(--teal2)' : count>0 ? 'var(--gold)' : 'var(--txt)';
+    html += '<div onclick="state.completedCalSelDate=\''+dateStr+'\';renderMain()" style="text-align:center;padding:7px 2px;border-radius:6px;background:'+bg+';border:1px solid '+border+';cursor:pointer;font-family:Barlow Condensed;font-size:12px;font-weight:700;color:'+color+'">'+d;
+    if(count>0) html += '<div style="font-size:8px;margin-top:1px;font-weight:800">'+count+'</div>';
+    html += '</div>';
+  }
+  html += '</div></div>';
+
+  if(state.completedCalSelDate) {
+    var selClientIds = byDate[state.completedCalSelDate] ? Object.keys(byDate[state.completedCalSelDate]) : [];
+    var selClients = state.clients.filter(function(c){ return selClientIds.indexOf(c.id) > -1; });
+    html += '<div class="card"><div class="clbl">'+state.completedCalSelDate+'</div>';
+    if(!selClients.length) {
+      html += '<div style="color:var(--muted);font-size:12px;font-style:italic">No workouts logged this day</div>';
+    } else {
+      selClients.forEach(function(c){
+        html += '<div onclick="selectClient(\''+c.id+'\')" style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--b1);cursor:pointer">';
+        html += '<div class="av" style="width:28px;height:28px;font-size:11px">'+ini(c.name)+'</div>';
+        html += '<span style="font-size:13px;font-weight:600;flex:1">'+esc(c.name)+'</span>';
+        html += '<span style="color:var(--muted);font-size:14px">›</span>';
+        html += '</div>';
+      });
+    }
+    html += '</div>';
+  }
   return html;
 }
 
