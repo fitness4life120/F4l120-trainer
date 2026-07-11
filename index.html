@@ -3477,7 +3477,55 @@ async function loadTidyCalBookings() {
 function setClientsSubView(v) {
   state.clientsSubView = v;
   if(v === "calendar" && state.tidycalStatus === "loading") loadTidyCalBookings();
+  if(v === "calendar" && state.gcalStatus === "loading") loadGoogleCalendarEvents();
   renderMain();
+}
+
+// ── GOOGLE CALENDAR MODULE ──
+state.gcalEvents = [];
+state.gcalStatus = "loading"; // loading | connected | not_connected | error
+var GCAL_EVENTS_FN_URL = "https://superb-eclair-9ca7e8.netlify.app/.netlify/functions/google-calendar-events";
+var GOOGLE_CLIENT_ID = "897055659759-mnibc2pr1123jh2i3mu4v1d2qbbj1aqu.apps.googleusercontent.com";
+var GOOGLE_REDIRECT_URI = "https://superb-eclair-9ca7e8.netlify.app/.netlify/functions/google-calendar-callback";
+
+async function loadGoogleCalendarEvents() {
+  state.gcalStatus = "loading";
+  try {
+    var start = new Date(); start.setDate(start.getDate()-1);
+    var end = new Date(); end.setDate(end.getDate()+30);
+    var url = GCAL_EVENTS_FN_URL + "?timeMin=" + encodeURIComponent(start.toISOString()) + "&timeMax=" + encodeURIComponent(end.toISOString());
+    var res = await fetch(url);
+    if(!res.ok) { state.gcalStatus = "error"; renderMain(); return; }
+    var data = await res.json();
+    state.gcalEvents = data.data || [];
+    state.gcalStatus = data.connected ? "connected" : "not_connected";
+  } catch(e) { state.gcalStatus = "error"; }
+  renderMain();
+}
+
+function connectGoogleCalendar() {
+  var scope = "https://www.googleapis.com/auth/calendar.readonly";
+  var params = new URLSearchParams({
+    client_id: GOOGLE_CLIENT_ID,
+    redirect_uri: GOOGLE_REDIRECT_URI,
+    response_type: "code",
+    scope: scope,
+    access_type: "offline",
+    prompt: "consent"
+  });
+  window.open("https://accounts.google.com/o/oauth2/v2/auth?" + params.toString(), "_blank");
+  showToast("Complete the Google sign-in in the new tab, then come back and tap Refresh");
+}
+
+async function disconnectGoogleCalendar() {
+  if(!confirm("Disconnect Google Calendar?")) return;
+  try {
+    await fetch(GCAL_EVENTS_FN_URL, { method: "DELETE" });
+    state.gcalEvents = [];
+    state.gcalStatus = "not_connected";
+    showToast("Google Calendar disconnected");
+    renderMain();
+  } catch(e) { showToast("Could not disconnect"); }
 }
 
 // ── RESOURCE LIBRARY MODULE ──
@@ -3946,10 +3994,19 @@ function renderMasterCalendar() {
   html += '<div style="font-size:15px;font-weight:700">Master Calendar</div>';
   html += '</div>';
 
+  html += '<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px;flex-wrap:wrap">';
+  if(state.gcalStatus === "connected") {
+    html += '<button onclick="loadGoogleCalendarEvents()" style="background:var(--s1);border:1px solid var(--b1);color:var(--muted);border-radius:6px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer">↻ Refresh</button>';
+    html += '<button onclick="disconnectGoogleCalendar()" style="background:rgba(224,82,82,0.1);border:1px solid rgba(224,82,82,0.25);color:var(--red);border-radius:6px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer">Disconnect Google</button>';
+  } else {
+    html += '<button onclick="connectGoogleCalendar()" style="background:var(--teal3);border:1px solid var(--teal);color:var(--teal2);border-radius:6px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer">🗓️ Connect Google Calendar</button>';
+  }
+  html += '</div>';
+
   // Build a merged, date-grouped agenda for the next 30 days
   var today = tod();
   var byDate = {};
-  function ensureDate(d){ if(!byDate[d]) byDate[d] = { sessions: [], workouts: [] }; return byDate[d]; }
+  function ensureDate(d){ if(!byDate[d]) byDate[d] = { sessions: [], workouts: [], gcal: [] }; return byDate[d]; }
 
   state.tidycalBookings.forEach(function(b){
     var d = b.starts_at ? b.starts_at.slice(0,10) : null;
@@ -3961,13 +4018,21 @@ function renderMasterCalendar() {
     var client = state.clients.find(function(c){ return c.id === p.client_id; });
     ensureDate(p.date).workouts.push({ clientName: client ? client.name : "Unknown Client", label: p.label || "Workout" });
   });
+  state.gcalEvents.forEach(function(e){
+    var d = e.start ? e.start.slice(0,10) : null;
+    if(!d) return;
+    ensureDate(d).gcal.push(e);
+  });
 
   var dates = Object.keys(byDate).sort();
 
   if(state.tidycalStatus === "error") {
-    html += '<div style="background:rgba(224,82,82,0.1);border:1px solid rgba(224,82,82,0.25);color:var(--red);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px">Could not load TidyCal sessions. Showing assigned workouts only.</div>';
+    html += '<div style="background:rgba(224,82,82,0.1);border:1px solid rgba(224,82,82,0.25);color:var(--red);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px">Could not load TidyCal sessions.</div>';
   } else if(state.tidycalStatus === "loading") {
     html += '<div style="color:var(--muted);font-size:12px;font-style:italic;margin-bottom:12px">Loading TidyCal sessions…</div>';
+  }
+  if(state.gcalStatus === "error") {
+    html += '<div style="background:rgba(224,82,82,0.1);border:1px solid rgba(224,82,82,0.25);color:var(--red);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px">Could not load Google Calendar events.</div>';
   }
 
   if(!dates.length) {
@@ -3977,10 +4042,16 @@ function renderMasterCalendar() {
 
   dates.forEach(function(d){
     var day = byDate[d];
-    if(!day.sessions.length && !day.workouts.length) return;
+    if(!day.sessions.length && !day.workouts.length && !day.gcal.length) return;
     var dObj = new Date(d+"T12:00:00");
     var dLabel = dObj.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"});
-    html += '<div class="dh"><span class="dl">'+dLabel+(d===today?" · Today":"")+'</span><div class="dline"></div><span class="dc">'+(day.sessions.length+day.workouts.length)+'</span></div>';
+    html += '<div class="dh"><span class="dl">'+dLabel+(d===today?" · Today":"")+'</span><div class="dline"></div><span class="dc">'+(day.sessions.length+day.workouts.length+day.gcal.length)+'</span></div>';
+    day.gcal.sort(function(a,b){ return (a.start||"").localeCompare(b.start||""); }).forEach(function(e){
+      var timeStr = e.allDay ? "All day" : new Date(e.start).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
+      html += '<div style="background:rgba(168,107,204,0.1);border:1px solid rgba(168,107,204,0.3);border-left:3px solid #a86bcc;border-radius:7px;padding:9px 12px;margin-bottom:5px">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px;font-weight:600;color:#a86bcc">🗓️ '+esc(e.title)+'</span><span style="font-size:11px;color:#a86bcc;font-weight:700">'+timeStr+'</span></div>'
+        + '</div>';
+    });
     day.sessions.sort(function(a,b){ return a.starts_at.localeCompare(b.starts_at); }).forEach(function(s){
       var timeStr = new Date(s.starts_at).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
       html += '<div style="background:var(--teal3);border:1px solid var(--teal);border-left:3px solid var(--teal);border-radius:7px;padding:9px 12px;margin-bottom:5px">'
