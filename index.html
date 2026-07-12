@@ -463,6 +463,46 @@ body{font-family:'Barlow',sans-serif;color:var(--txt)}
   </div>
 </div>
 
+<div class="overlay" id="newPaymentOptionSheet">
+  <div class="sheet">
+    <div class="hdl"></div>
+    <div class="stitle">New Payment Option</div>
+    <div class="f"><label>Name</label><input id="po_name" placeholder="e.g. Transformation, 1-Year Program"/></div>
+    <div class="f"><label>Type</label>
+      <select id="po_mode" onchange="onPOModeChange()">
+        <option value="payment">One-time</option>
+        <option value="subscription">Recurring</option>
+      </select>
+    </div>
+    <div class="f"><label>Amount (USD)</label><input type="number" inputmode="decimal" step="0.01" id="po_amount" placeholder="e.g. 197.00"/></div>
+    <div class="f" id="po_interval_wrap" style="display:none">
+      <label>Billing Interval</label>
+      <select id="po_interval">
+        <option value="month">Monthly</option>
+        <option value="year">Yearly</option>
+      </select>
+    </div>
+    <button class="bp" onclick="saveNewPaymentOption()">Create in Stripe</button>
+    <button class="bg_" onclick="closeSheet('newPaymentOptionSheet')">Cancel</button>
+  </div>
+</div>
+
+<div class="overlay" id="generateLinkSheet">
+  <div class="sheet">
+    <div class="hdl"></div>
+    <div class="stitle">Generate Payment Link</div>
+    <div class="f"><label>Client</label><select id="gl_client"></select></div>
+    <div class="f"><label>Payment Option</label><select id="gl_option"></select></div>
+    <button class="bp" id="gl_generate_btn" onclick="confirmGenerateLink()">Generate Link</button>
+    <div id="gl_result" style="display:none">
+      <div class="f"><label>Link</label><input id="gl_link_url" readonly style="font-size:11px"/></div>
+      <button class="bp" onclick="copyGeneratedLink()">📋 Copy Link</button>
+      <button class="bgold" onclick="sendGeneratedLinkViaMessage()">💬 Send via Message</button>
+    </div>
+    <button class="bg_" onclick="closeSheet('generateLinkSheet')">Close</button>
+  </div>
+</div>
+
 <div class="overlay" id="logExSheet">
   <div class="sheet">
     <div class="hdl"></div>
@@ -806,6 +846,7 @@ function renderClients() {
   if(state.clientsSubView === "forms") return renderIntakeForms();
   if(state.clientsSubView === "intakeResponses") return renderIntakeFormResponses();
   if(state.clientsSubView === "completed") return renderCompletedWorkoutsCalendar();
+  if(state.clientsSubView === "payments") return renderPayments();
   var inactiveCount = state.clients.filter(function(c){ return c.active === false; }).length;
   var visibleClients = state.showInactiveClients ? state.clients : state.clients.filter(function(c){ return c.active !== false; });
   var fC = visibleClients.filter(function(c){ return c.name.toLowerCase().includes(state.srch.toLowerCase()); });
@@ -815,6 +856,7 @@ function renderClients() {
   html += '<button class="chip" style="cursor:pointer;color:var(--green)" onclick="setClientsSubView(\'completed\')">🏋️ Completed Workouts</button>';
   html += '<button class="chip" style="cursor:pointer;color:var(--gold)" onclick="setClientsSubView(\'library\')">📚 Library</button>';
   html += '<button class="chip" style="cursor:pointer;color:var(--gold)" onclick="setClientsSubView(\'forms\')">📋 Forms</button>';
+  html += '<button class="chip" style="cursor:pointer;color:var(--green)" onclick="setClientsSubView(\'payments\')">💳 Payments</button>';
   html += '</div>';
   html += '<div class="imp-banner" onclick="document.getElementById(\'gtFile\').click()">'
     +'<span style="font-size:24px;flex-shrink:0">📥</span>'
@@ -3733,6 +3775,193 @@ function renderIntakeFormResponses() {
     }
     html += '</div>';
   });
+  return html;
+}
+
+// ── PAYMENTS MODULE ──
+state.paymentOptions = [];
+state.clientPayments = [];
+
+var STRIPE_FN_BASE = "https://superb-eclair-9ca7e8.netlify.app/.netlify/functions/";
+
+async function loadPayments() {
+  try {
+    var results = await Promise.all([
+      api("payment_options?order=created_at.desc"),
+      api("client_payments?order=created_at.desc&limit=200")
+    ]);
+    state.paymentOptions = results[0] || [];
+    state.clientPayments = results[1] || [];
+    if(state.clientsSubView === "payments") renderMain();
+  } catch(e) { /* non-fatal */ }
+}
+loadPayments();
+
+async function syncPaymentOptionsFromStripe() {
+  showToast("Syncing from Stripe…");
+  try {
+    var res = await fetch(STRIPE_FN_BASE + "stripe-sync-products");
+    if(!res.ok) { showToast("Sync failed"); return; }
+    state.paymentOptions = await api("payment_options?order=created_at.desc");
+    showToast("Synced ✓");
+    renderMain();
+  } catch(e) { showToast("Could not sync"); }
+}
+
+function openNewPaymentOptionSheet() {
+  document.getElementById("po_name").value = "";
+  document.getElementById("po_amount").value = "";
+  document.getElementById("po_mode").value = "payment";
+  document.getElementById("po_interval_wrap").style.display = "none";
+  openSheet("newPaymentOptionSheet");
+}
+
+function onPOModeChange() {
+  var mode = document.getElementById("po_mode").value;
+  document.getElementById("po_interval_wrap").style.display = mode === "subscription" ? "block" : "none";
+}
+
+async function saveNewPaymentOption() {
+  var name = document.getElementById("po_name").value.trim();
+  var mode = document.getElementById("po_mode").value;
+  var dollars = parseFloat(document.getElementById("po_amount").value);
+  var interval = document.getElementById("po_interval").value;
+  if(!name) { showToast("Name this payment option"); return; }
+  if(!dollars || dollars <= 0) { showToast("Enter a valid amount"); return; }
+  try {
+    var res = await fetch(STRIPE_FN_BASE + "stripe-create-price", {
+      method: "POST",
+      body: JSON.stringify({ name: name, mode: mode, amountCents: Math.round(dollars*100), interval: interval })
+    });
+    var data = await res.json();
+    if(!res.ok) { showToast("Could not create: " + (data.error||"unknown error")); return; }
+    state.paymentOptions.unshift(data.option);
+    closeSheet("newPaymentOptionSheet");
+    showToast("Payment option created ✓");
+    renderMain();
+  } catch(e) { showToast("Could not create payment option"); }
+}
+
+function openGenerateLinkSheet() {
+  var sel = document.getElementById("gl_client");
+  sel.innerHTML = state.clients.filter(function(c){return c.active!==false;}).map(function(c){ return '<option value="'+c.id+'">'+esc(c.name)+'</option>'; }).join("");
+  var optSel = document.getElementById("gl_option");
+  optSel.innerHTML = state.paymentOptions.filter(function(o){return o.active!==false;}).map(function(o){
+    var amt = (o.amount_cents/100).toFixed(2);
+    var label = o.name + " — $" + amt + (o.mode==="subscription" ? "/" + (o.interval||"month") : " one-time");
+    return '<option value="'+o.id+'">'+esc(label)+'</option>';
+  }).join("");
+  document.getElementById("gl_result").style.display = "none";
+  document.getElementById("gl_generate_btn").style.display = "block";
+  openSheet("generateLinkSheet");
+}
+
+async function confirmGenerateLink() {
+  var clientId = document.getElementById("gl_client").value;
+  var optionId = document.getElementById("gl_option").value;
+  var client = state.clients.find(function(c){return c.id===clientId;});
+  var option = state.paymentOptions.find(function(o){return o.id===optionId;});
+  if(!client || !option) { showToast("Select a client and a payment option"); return; }
+  showToast("Generating link…");
+  try {
+    var res = await fetch(STRIPE_FN_BASE + "stripe-create-checkout", {
+      method: "POST",
+      body: JSON.stringify({
+        clientId: client.id, clientName: client.name,
+        paymentOptionId: option.id, stripePriceId: option.stripe_price_id,
+        mode: option.mode, amountCents: option.amount_cents
+      })
+    });
+    var data = await res.json();
+    if(!res.ok) { showToast("Could not generate link: " + (data.error||"unknown error")); return; }
+    document.getElementById("gl_link_url").value = data.url;
+    document.getElementById("gl_result").style.display = "block";
+    document.getElementById("gl_generate_btn").style.display = "none";
+    loadPayments();
+  } catch(e) { showToast("Could not generate link"); }
+}
+
+function copyGeneratedLink() {
+  var input = document.getElementById("gl_link_url");
+  input.select();
+  document.execCommand("copy");
+  showToast("Link copied ✓");
+}
+
+function sendGeneratedLinkViaMessage() {
+  var clientId = document.getElementById("gl_client").value;
+  var url = document.getElementById("gl_link_url").value;
+  closeSheet("generateLinkSheet");
+  state.activeId = clientId;
+  state.view = "messages";
+  state.msgView = "compose";
+  state.composeType = "individual";
+  renderNav(); renderMain();
+  setTimeout(function(){
+    var clientSel = document.getElementById("composeClient");
+    if(clientSel) clientSel.value = clientId;
+    var box = document.getElementById("composeBody");
+    if(box) box.value = "Here's your payment link: " + url;
+  }, 100);
+}
+
+function renderPaymentStatusBadge(status) {
+  var colors = {
+    pending: ["var(--muted)","var(--s1)"],
+    paid: ["var(--green)","rgba(45,186,128,0.15)"],
+    active: ["var(--green)","rgba(45,186,128,0.15)"],
+    past_due: ["var(--gold)","var(--gold2)"],
+    canceled: ["var(--red)","rgba(224,82,82,0.1)"],
+    expired: ["var(--muted)","var(--s1)"]
+  };
+  var c = colors[status] || colors.pending;
+  return '<span style="font-size:10px;font-weight:700;color:'+c[0]+';background:'+c[1]+';border-radius:4px;padding:2px 7px;text-transform:uppercase;letter-spacing:0.5px">'+status+'</span>';
+}
+
+function renderPayments() {
+  var html = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">';
+  html += '<div style="display:flex;align-items:center;gap:10px">';
+  html += '<button onclick="setClientsSubView(\'list\')" style="background:var(--s1);border:1px solid var(--b1);color:var(--txt);border-radius:8px;padding:8px 12px;cursor:pointer;font-size:14px">←</button>';
+  html += '<div style="font-size:15px;font-weight:700">Payments</div>';
+  html += '</div></div>';
+
+  html += '<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">';
+  html += '<button class="bgold" style="width:auto;margin:0;padding:9px 14px" onclick="openGenerateLinkSheet()">💳 Generate Payment Link</button>';
+  html += '<button class="chip" style="cursor:pointer;color:var(--teal2)" onclick="openNewPaymentOptionSheet()">+ New Option</button>';
+  html += '<button class="chip" style="cursor:pointer;color:var(--muted)" onclick="syncPaymentOptionsFromStripe()">↻ Sync from Stripe</button>';
+  html += '</div>';
+
+  html += '<div class="clbl">Payment Options</div>';
+  if(!state.paymentOptions.length) {
+    html += '<div style="color:var(--muted);font-size:12px;font-style:italic;margin-bottom:16px">None yet — tap "Sync from Stripe" to pull in what you\'ve created there, or "+ New Option" to add one from here.</div>';
+  } else {
+    state.paymentOptions.forEach(function(o){
+      var amt = (o.amount_cents/100).toFixed(2);
+      html += '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:8px;padding:10px 12px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">';
+      html += '<div><div style="font-size:13px;font-weight:700">'+esc(o.name)+'</div>';
+      html += '<div style="font-size:11px;color:var(--muted);margin-top:2px">$'+amt+(o.mode==="subscription"?"/"+(o.interval||"month"):" one-time")+'</div></div>';
+      html += o.mode==="subscription" ? '<span style="font-size:9px;color:var(--teal2);background:var(--teal3);border-radius:4px;padding:2px 6px">RECURRING</span>' : '<span style="font-size:9px;color:var(--gold);background:var(--gold2);border-radius:4px;padding:2px 6px">ONE-TIME</span>';
+      html += '</div>';
+    });
+  }
+
+  html += '<div class="clbl" style="margin-top:16px">Recent Activity</div>';
+  if(!state.clientPayments.length) {
+    html += '<div style="color:var(--muted);font-size:12px;font-style:italic">No payment links generated yet</div>';
+  } else {
+    state.clientPayments.forEach(function(p){
+      var client = state.clients.find(function(c){return c.id===p.client_id;});
+      var option = state.paymentOptions.find(function(o){return o.id===p.payment_option_id;});
+      var amt = p.amount_cents ? (p.amount_cents/100).toFixed(2) : "—";
+      html += '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:8px;padding:10px 12px;margin-bottom:6px">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center">';
+      html += '<span style="font-size:13px;font-weight:600">'+esc(client?client.name:"Unknown Client")+'</span>';
+      html += renderPaymentStatusBadge(p.status);
+      html += '</div>';
+      html += '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+esc(option?option.name:"—")+' · $'+amt+' · '+p.created_at.slice(0,10)+'</div>';
+      html += '</div>';
+    });
+  }
   return html;
 }
 
