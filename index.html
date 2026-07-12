@@ -478,8 +478,10 @@ body{font-family:'Barlow',sans-serif;color:var(--txt)}
     <div class="f" id="po_interval_wrap" style="display:none">
       <label>Billing Interval</label>
       <select id="po_interval">
-        <option value="month">Monthly</option>
-        <option value="year">Yearly</option>
+        <option value="month:1">Monthly</option>
+        <option value="month:3">Quarterly (every 3 months)</option>
+        <option value="month:6">Semi-Annually (every 6 months)</option>
+        <option value="year:1">Yearly</option>
       </select>
     </div>
     <button class="bp" onclick="saveNewPaymentOption()">Create in Stripe</button>
@@ -3825,13 +3827,14 @@ async function saveNewPaymentOption() {
   var name = document.getElementById("po_name").value.trim();
   var mode = document.getElementById("po_mode").value;
   var dollars = parseFloat(document.getElementById("po_amount").value);
-  var interval = document.getElementById("po_interval").value;
+  var intervalRaw = document.getElementById("po_interval").value.split(":");
+  var interval = intervalRaw[0], intervalCount = parseInt(intervalRaw[1],10) || 1;
   if(!name) { showToast("Name this payment option"); return; }
   if(!dollars || dollars <= 0) { showToast("Enter a valid amount"); return; }
   try {
     var res = await fetch(STRIPE_FN_BASE + "stripe-create-price", {
       method: "POST",
-      body: JSON.stringify({ name: name, mode: mode, amountCents: Math.round(dollars*100), interval: interval })
+      body: JSON.stringify({ name: name, mode: mode, amountCents: Math.round(dollars*100), interval: interval, intervalCount: intervalCount })
     });
     var data = await res.json();
     if(!res.ok) { showToast("Could not create: " + (data.error||"unknown error")); return; }
@@ -3848,7 +3851,7 @@ function openGenerateLinkSheet() {
   var optSel = document.getElementById("gl_option");
   optSel.innerHTML = state.paymentOptions.filter(function(o){return o.active!==false;}).map(function(o){
     var amt = (o.amount_cents/100).toFixed(2);
-    var label = o.name + " — $" + amt + (o.mode==="subscription" ? "/" + (o.interval||"month") : " one-time");
+    var label = o.name + " — $" + amt + (o.mode==="subscription" ? "/" + formatBillingInterval(o.interval, o.interval_count) : " one-time");
     return '<option value="'+o.id+'">'+esc(label)+'</option>';
   }).join("");
   document.getElementById("gl_result").style.display = "none";
@@ -3905,6 +3908,21 @@ function sendGeneratedLinkViaMessage() {
   }, 100);
 }
 
+function formatBillingInterval(interval, intervalCount) {
+  var count = intervalCount || 1;
+  if(interval === "month") {
+    if(count === 1) return "month";
+    if(count === 3) return "quarter";
+    if(count === 6) return "6 months";
+    return count + " months";
+  }
+  if(interval === "year") {
+    if(count === 1) return "year";
+    return count + " years";
+  }
+  return interval || "month";
+}
+
 function renderPaymentStatusBadge(status) {
   var colors = {
     pending: ["var(--muted)","var(--s1)"],
@@ -3939,7 +3957,7 @@ function renderPayments() {
       var amt = (o.amount_cents/100).toFixed(2);
       html += '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:8px;padding:10px 12px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">';
       html += '<div><div style="font-size:13px;font-weight:700">'+esc(o.name)+'</div>';
-      html += '<div style="font-size:11px;color:var(--muted);margin-top:2px">$'+amt+(o.mode==="subscription"?"/"+(o.interval||"month"):" one-time")+'</div></div>';
+      html += '<div style="font-size:11px;color:var(--muted);margin-top:2px">$'+amt+(o.mode==="subscription"?"/"+formatBillingInterval(o.interval,o.interval_count):" one-time")+'</div></div>';
       html += o.mode==="subscription" ? '<span style="font-size:9px;color:var(--teal2);background:var(--teal3);border-radius:4px;padding:2px 6px">RECURRING</span>' : '<span style="font-size:9px;color:var(--gold);background:var(--gold2);border-radius:4px;padding:2px 6px">ONE-TIME</span>';
       html += '</div>';
     });
