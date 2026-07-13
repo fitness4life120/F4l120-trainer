@@ -288,6 +288,10 @@ body{font-family:'Barlow',sans-serif;color:var(--txt)}
       <div class="f"><label>Rest</label><input id="dp_rest" placeholder="e.g. 60 sec"/></div>
       <div class="f"><label>Target Weight</label><input type="number" inputmode="decimal" id="dp_weight" placeholder="e.g. 135"/></div>
     </div>
+    <label style="display:flex;align-items:center;gap:8px;margin:4px 0 12px;cursor:pointer">
+      <input type="checkbox" id="dp_each_side" style="width:16px;height:16px"/>
+      <span style="font-size:12px;color:var(--muted)">Each side (unilateral exercise — reps are per side, not combined)</span>
+    </label>
     <div class="f"><label>Superset / Circuit Group</label>
       <select id="dp_group" onchange="onDPGroupChange()">
         <option value="">— None (standalone) —</option>
@@ -332,6 +336,10 @@ body{font-family:'Barlow',sans-serif;color:var(--txt)}
       <div class="f"><label>Rest</label><input id="ow_rest" placeholder="e.g. 60 sec"/></div>
       <div class="f"><label>Target Weight</label><input type="number" inputmode="decimal" id="ow_weight" placeholder="e.g. 135"/></div>
     </div>
+    <label style="display:flex;align-items:center;gap:8px;margin:4px 0 12px;cursor:pointer">
+      <input type="checkbox" id="ow_each_side" style="width:16px;height:16px"/>
+      <span style="font-size:12px;color:var(--muted)">Each side (unilateral exercise — reps are per side, not combined)</span>
+    </label>
     <button class="bgold" id="owAddBtn" onclick="addOWExercise()">+ Add Exercise</button>
     <div id="owCancelEditWrap" style="display:none;text-align:center;margin-top:6px">
       <a href="javascript:void(0)" onclick="cancelOWEdit()" style="font-size:11px;color:var(--muted);text-decoration:underline">Cancel edit</a>
@@ -689,7 +697,7 @@ function onPlusClick() {
 function renderMain() {
   var el = document.getElementById("mainScroll");
   if(state.view === "clients") el.innerHTML = renderClients();
-  else if(state.view === "log") { el.innerHTML = renderLog(); if(getActive() && !libView) { setRowCounts.q = 3; quickLogType = "reps"; renderSetRows("q","qSetRowsList",[{reps:"",weight:""},{reps:"",weight:""},{reps:"",weight:""}]); renderQuickTypeToggle(); } }
+  else if(state.view === "log") { el.innerHTML = renderLog(); if(getActive() && !libView) { setRowCounts.q = 3; quickLogType = "reps"; quickLogEachSide = false; renderSetRows("q","qSetRowsList",[{reps:"",weight:""},{reps:"",weight:""},{reps:"",weight:""}]); renderQuickTypeToggle(); } }
   else if(state.view === "nutrition") el.innerHTML = renderNutrition();
   else if(state.view === "plans") el.innerHTML = renderPlans();
   else if(state.view === "habits") el.innerHTML = renderHabits();
@@ -970,6 +978,7 @@ function renderLog() {
 
   html += '</div>';
   html += '<div id="qTypeToggle" style="display:flex;gap:4px;background:var(--bg);border-radius:16px;padding:3px;margin-bottom:8px;width:fit-content"></div>';
+  html += '<label style="display:flex;align-items:center;gap:6px;margin-bottom:8px;cursor:pointer"><input type="checkbox" id="qEachSide" onchange="quickLogEachSide=this.checked" style="width:14px;height:14px"/><span style="font-size:11px;color:var(--muted)">Each side</span></label>';
   html += '<div style="font-family:Barlow Condensed;font-size:9px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:5px">Sets</div>';
   html += '<div id="qSetRowsList" style="margin-bottom:8px"></div>';
   html += '<button onclick="addSetRow(\'q\',\'qSetRowsList\')" style="width:100%;background:var(--s1);border:1px dashed var(--b1);border-radius:7px;padding:8px;color:var(--muted);font-size:12px;font-weight:700;cursor:pointer;margin-bottom:10px">+ Add Set</button>';
@@ -1016,7 +1025,7 @@ function renderExGroupTrainer(g) {
   g.sets.forEach(function(s,i){
     var unit = s.log_type === "time" ? " sec" : " reps";
     html += '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted)">'
-      + '<span>Set '+(i+1)+': '+(s.reps||"?")+unit+(s.weight?' @ '+s.weight+' lbs':'')+'</span>'
+      + '<span>Set '+(i+1)+': '+(s.reps||"?")+unit+(s.each_side?' each':'')+(s.weight?' @ '+s.weight+' lbs':'')+'</span>'
       + '<button data-exid="'+s.id+'" class="del-ex-btn" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:11px;text-decoration:underline;padding:2px 4px">remove</button>'
       + '</div>';
   });
@@ -1097,6 +1106,7 @@ function resetOWForm() {
   document.getElementById("ow_type").value = "reps";
   document.getElementById("ow_rest").value = "";
   document.getElementById("ow_weight").value = "";
+  document.getElementById("ow_each_side").checked = false;
   document.getElementById("ow_muscle").selectedIndex = 0;
   onOWTypeChange();
   editingOWIndex = null;
@@ -1116,6 +1126,7 @@ function editOWExercise(idx) {
   document.getElementById("ow_reps").value = ex.reps;
   document.getElementById("ow_rest").value = ex.rest || "";
   document.getElementById("ow_weight").value = ex.weight || "";
+  document.getElementById("ow_each_side").checked = !!ex.each_side;
   var muscleSel = document.getElementById("ow_muscle");
   for(var i=0;i<muscleSel.options.length;i++){ if(muscleSel.options[i].value === ex.muscle) muscleSel.selectedIndex = i; }
   editingOWIndex = idx;
@@ -1134,6 +1145,7 @@ function addOWExercise() {
     type: type,
     rest: document.getElementById("ow_rest").value.trim() || "",
     weight: document.getElementById("ow_weight").value.trim() || "",
+    each_side: document.getElementById("ow_each_side").checked,
     muscle: document.getElementById("ow_muscle").value,
     group: null
   };
@@ -1151,7 +1163,7 @@ function renderOWExList() {
   if(!el) return;
   el.innerHTML = owExercises.map(function(ex,i){
     var isTime = ex.type === "time";
-    var repsLine = ex.sets+'×'+ex.reps+(ex.weight?' @ '+esc(ex.weight)+' lbs':'') + ' · '+esc(ex.muscle);
+    var repsLine = ex.sets+'×'+ex.reps+(ex.each_side?' each':'')+(ex.weight?' @ '+esc(ex.weight)+' lbs':'') + ' · '+esc(ex.muscle);
     var restLine = ex.rest ? ' · Rest '+esc(ex.rest) : '';
     return '<div data-owediti="'+i+'" class="ow-edit-row" style="cursor:pointer;background:var(--bg);border:1px solid var(--b1);border-left:3px solid var(--gold);border-radius:7px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:8px">'
       +'<div style="flex:1"><div style="font-size:13px;font-weight:600">'+esc(ex.name)+(isTime?' <span style="font-size:9px;color:var(--gold);background:var(--gold2);border-radius:3px;padding:1px 5px;margin-left:4px">TIME</span>':'')+'</div>'
@@ -1263,6 +1275,7 @@ function resetDPForm() {
   document.getElementById("dp_type").value = "reps";
   document.getElementById("dp_rest").value = "";
   document.getElementById("dp_weight").value = "";
+  document.getElementById("dp_each_side").checked = false;
   document.getElementById("dp_muscle").selectedIndex = 0;
   onDPTypeChange();
   refreshDPGroupOptions();
@@ -1286,6 +1299,7 @@ function editDPExercise(idx) {
   document.getElementById("dp_reps").value = ex.reps;
   document.getElementById("dp_rest").value = ex.rest || "";
   document.getElementById("dp_weight").value = ex.weight || "";
+  document.getElementById("dp_each_side").checked = !!ex.each_side;
   var muscleSel = document.getElementById("dp_muscle");
   for(var i=0;i<muscleSel.options.length;i++){ if(muscleSel.options[i].value === ex.muscle) muscleSel.selectedIndex = i; }
   refreshDPGroupOptions();
@@ -1308,6 +1322,7 @@ function addDPExercise() {
     type: type,
     rest: document.getElementById("dp_rest").value.trim() || "",
     weight: document.getElementById("dp_weight").value.trim() || "",
+    each_side: document.getElementById("dp_each_side").checked,
     muscle: document.getElementById("dp_muscle").value,
     group: groupVal || null
   };
@@ -1342,7 +1357,7 @@ function renderDPExList() {
   dpExercises.forEach(function(e){ if(e.group) groupCounts[e.group] = (groupCounts[e.group]||0)+1; });
   el.innerHTML = dpExercises.map(function(ex,i){
     var isTime = ex.type === "time";
-    var repsLine = ex.sets+'×'+ex.reps+(isTime?'':'') + (ex.weight?' @ '+esc(ex.weight)+' lbs':'') + ' · '+esc(ex.muscle);
+    var repsLine = ex.sets+'×'+ex.reps+(ex.each_side?' each':'')+(isTime?'':'') + (ex.weight?' @ '+esc(ex.weight)+' lbs':'') + ' · '+esc(ex.muscle);
     var restLine = ex.rest ? ' · Rest '+esc(ex.rest) : '';
     var hasGroup = !!ex.group;
     var groupLabel = hasGroup ? ((groupCounts[ex.group]>=3?"Circuit ":"Superset ")+ex.group) : "";
@@ -1471,7 +1486,7 @@ function renderExCardTrainer(ex) {
   html += '<span style="font-size:13px;font-weight:600">'+esc(ex.name)+(isTime?' <span style="font-size:9px;color:var(--gold);background:var(--gold2);border-radius:3px;padding:1px 5px;margin-left:4px">TIME</span>':'')+'</span>';
   html += '<span style="font-size:10px;color:'+(hasVid?"var(--green)":"var(--muted)")+'">'+(hasVid?"🎥":"")+'</span>';
   html += '</div>';
-  html += '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+ex.sets+'×'+ex.reps+(ex.weight?' @ '+esc(ex.weight)+' lbs':'')+(ex.muscle?' · '+esc(ex.muscle):'')+(ex.rest?' · Rest '+esc(ex.rest):'')+'</div>';
+  html += '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+ex.sets+'×'+ex.reps+(ex.each_side?' each':'')+(ex.weight?' @ '+esc(ex.weight)+' lbs':'')+(ex.muscle?' · '+esc(ex.muscle):'')+(ex.rest?' · Rest '+esc(ex.rest):'')+'</div>';
   if(pr) html += '<div style="font-size:10px;color:var(--gold);margin-top:2px;font-weight:700">🏆 PR: '+pr.weight+' lbs × '+pr.reps+(pr.log_type==="time"?" sec":"")+'</div>';
   html += '</div>';
   return html;
@@ -2535,6 +2550,7 @@ function openShare() {
 }
 
 var quickLogType = "reps";
+var quickLogEachSide = false;
 
 function setQuickLogType(type) {
   var vals = captureSetValues("q");
@@ -2567,7 +2583,7 @@ async function quickLogEx() {
 
   try {
     var payload = setVals.map(function(r){
-      return { client_id: state.activeId, exercise: ex, sets: 1, reps: r.reps, weight: r.weight, muscle: "Full Body", notes: "", date: tod(), from_plan: false, log_type: quickLogType };
+      return { client_id: state.activeId, exercise: ex, sets: 1, reps: r.reps, weight: r.weight, muscle: "Full Body", notes: "", date: tod(), from_plan: false, log_type: quickLogType, each_side: quickLogEachSide };
     });
     var data = await api("workout_logs", {method:"POST", body:JSON.stringify(payload)});
     if(data && data.length) {
