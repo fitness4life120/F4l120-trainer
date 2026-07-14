@@ -877,6 +877,7 @@ function renderClients() {
   if(state.clientsSubView === "completed") return renderCompletedWorkoutsCalendar();
   if(state.clientsSubView === "payments") return renderPayments();
   if(state.clientsSubView === "foodLibrary") return renderFoodLibrary();
+  if(state.clientsSubView === "exerciseLibrary") return renderLibrary();
   var inactiveCount = state.clients.filter(function(c){ return c.active === false; }).length;
   var visibleClients = state.showInactiveClients ? state.clients : state.clients.filter(function(c){ return c.active !== false; });
   var fC = visibleClients.filter(function(c){ return c.name.toLowerCase().includes(state.srch.toLowerCase()); });
@@ -888,6 +889,7 @@ function renderClients() {
   html += '<button class="chip" style="cursor:pointer;color:var(--gold)" onclick="setClientsSubView(\'forms\')">📋 Forms</button>';
   html += '<button class="chip" style="cursor:pointer;color:var(--green)" onclick="setClientsSubView(\'payments\')">💳 Payments</button>';
   html += '<button class="chip" style="cursor:pointer;color:var(--gold)" onclick="setClientsSubView(\'foodLibrary\')">🍎 Food Library</button>';
+  html += '<button class="chip" style="cursor:pointer;color:var(--teal2);background:var(--teal3)" onclick="setClientsSubView(\'exerciseLibrary\')">🏋️ Exercise Library</button>';
   html += '</div>';
   html += '<div class="imp-banner" onclick="document.getElementById(\'gtFile\').click()">'
     +'<span style="font-size:24px;flex-shrink:0">📥</span>'
@@ -2435,7 +2437,7 @@ function renderLibrary() {
   
   var html = '<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">';
   html += '<input id="libSearch" placeholder="Search 549 exercises…" oninput="renderMain()" style="background:var(--s1);border:1px solid var(--b1);border-radius:8px;padding:10px 12px;color:var(--txt);font-family:Barlow,sans-serif;font-size:13px;outline:none;flex:1"/>';
-  html += '<button class="bg_" style="width:auto;padding:10px 14px;margin:0;white-space:nowrap" onclick="toggleLibrary()">✕ Close</button>';
+  html += '<button class="bg_" style="width:auto;padding:10px 14px;margin:0;white-space:nowrap" onclick="' + (state.clientsSubView === "exerciseLibrary" ? "setClientsSubView(\'list\')" : "toggleLibrary()") + '">✕ Close</button>';
   html += '</div>';
   
   if(srch) {
