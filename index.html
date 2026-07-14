@@ -5005,6 +5005,85 @@ function nDayLabel(dateStr) {
   return new Date(dateStr + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 }
 
+var TRAINER_SPEECH_API = typeof window!=="undefined" ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null;
+var trainerNutritionListening = false;
+var trainerNutritionRecognition = null;
+var trainerNutritionShouldContinue = false;
+var trainerNutritionBaseText = "";
+
+function toggleTrainerNutritionListening() {
+  if(trainerNutritionListening) { stopTrainerNutritionListening(); }
+  else { startTrainerNutritionListening(); }
+}
+
+function updateTrainerVoiceButtonUI() {
+  var btn = document.getElementById("nVoiceBtn");
+  var status = document.getElementById("nVoiceStatus");
+  if(btn) {
+    btn.textContent = trainerNutritionListening ? "■" : "🎤";
+    btn.style.background = trainerNutritionListening ? "var(--red)" : "var(--teal)";
+    btn.style.boxShadow = trainerNutritionListening ? "0 0 0 8px rgba(224,82,82,0.15)" : "0 0 0 8px rgba(27,136,153,0.15)";
+  }
+  if(status) status.textContent = trainerNutritionListening ? "Listening… tap to stop" : "Tap to speak what they ate";
+}
+
+function startTrainerNutritionListening() {
+  if(!TRAINER_SPEECH_API) { showToast("Voice input isn't supported in this browser"); return; }
+  var input = document.getElementById("nMealInput");
+  trainerNutritionBaseText = input && input.value ? input.value.trim()+" " : "";
+  trainerNutritionShouldContinue = true;
+  trainerNutritionListening = true;
+  updateTrainerVoiceButtonUI();
+
+  function beginSegment() {
+    var rec = new TRAINER_SPEECH_API();
+    rec.continuous = false;
+    rec.interimResults = true;
+    rec.lang = "en-US";
+    var segmentFinal = "";
+    rec.onresult = function(e) {
+      var f = "", i2 = "";
+      for(var i=0;i<e.results.length;i++){
+        if(e.results[i].isFinal) f += e.results[i][0].transcript;
+        else i2 += e.results[i][0].transcript;
+      }
+      segmentFinal = f;
+      var inp = document.getElementById("nMealInput");
+      if(inp) inp.value = (trainerNutritionBaseText + f + i2).replace(/\s+/g," ").trim();
+    };
+    rec.onerror = function(e) {
+      if(e.error === "no-speech" || e.error === "aborted") return;
+      trainerNutritionShouldContinue = false;
+      trainerNutritionListening = false;
+      updateTrainerVoiceButtonUI();
+    };
+    rec.onend = function() {
+      if(segmentFinal){
+        trainerNutritionBaseText = (trainerNutritionBaseText + " " + segmentFinal).replace(/\s+/g," ").trim() + " ";
+      }
+      var inp = document.getElementById("nMealInput");
+      if(inp) inp.value = trainerNutritionBaseText.trim();
+      if(trainerNutritionShouldContinue){
+        try { beginSegment(); } catch(err){ trainerNutritionListening = false; updateTrainerVoiceButtonUI(); }
+      } else {
+        trainerNutritionListening = false;
+        updateTrainerVoiceButtonUI();
+      }
+    };
+    trainerNutritionRecognition = rec;
+    rec.start();
+  }
+
+  beginSegment();
+}
+
+function stopTrainerNutritionListening() {
+  trainerNutritionShouldContinue = false;
+  if(trainerNutritionRecognition) trainerNutritionRecognition.stop();
+  trainerNutritionListening = false;
+  updateTrainerVoiceButtonUI();
+}
+
 function renderNutrition() {
   var a = getActive();
   if (!a) return '<div class="empty">Select a client first</div>';
@@ -5088,15 +5167,21 @@ function renderNutrition() {
         + '</div>')
     + '</div>';
   html += '<div class="card">'
-    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
-    + '<div class="clbl" style="margin-bottom:0">Log a Meal</div>'
-    + '<div style="display:flex;gap:4px;background:var(--bg);border-radius:16px;padding:3px">'
-    + '<button onclick="state.nMode=\'text\';renderMain()" style="padding:5px 12px;border-radius:13px;border:none;cursor:pointer;font-size:11px;font-weight:700;background:' + (state.nMode !== "photo" ? "var(--teal)" : "transparent") + ';color:' + (state.nMode !== "photo" ? "#fff" : "var(--muted)") + '">Text</button>'
-    + '<button onclick="state.nMode=\'photo\';renderMain()" style="padding:5px 12px;border-radius:13px;border:none;cursor:pointer;font-size:11px;font-weight:700;background:' + (state.nMode === "photo" ? "var(--teal)" : "transparent") + ';color:' + (state.nMode === "photo" ? "#fff" : "var(--muted)") + '">Photo</button>'
-    + '</div></div>';
+    + '<div class="clbl" style="margin-bottom:8px">Log a Meal</div>'
+    + '<div style="display:flex;gap:4px;background:var(--bg);border-radius:16px;padding:3px;margin-bottom:10px;flex-wrap:wrap">'
+    + '<button onclick="stopTrainerNutritionListening();state.nMode=\'text\';renderMain()" style="padding:5px 12px;border-radius:13px;border:none;cursor:pointer;font-size:11px;font-weight:700;background:' + (state.nMode === "text" ? "var(--teal)" : "transparent") + ';color:' + (state.nMode === "text" ? "#fff" : "var(--muted)") + '">Text</button>'
+    + (TRAINER_SPEECH_API ? '<button onclick="state.nMode=\'voice\';renderMain()" style="padding:5px 12px;border-radius:13px;border:none;cursor:pointer;font-size:11px;font-weight:700;background:' + (state.nMode === "voice" ? "var(--teal)" : "transparent") + ';color:' + (state.nMode === "voice" ? "#fff" : "var(--muted)") + '">🎤 Voice</button>' : '')
+    + '<button onclick="stopTrainerNutritionListening();state.nMode=\'photo\';renderMain()" style="padding:5px 12px;border-radius:13px;border:none;cursor:pointer;font-size:11px;font-weight:700;background:' + (state.nMode === "photo" ? "var(--teal)" : "transparent") + ';color:' + (state.nMode === "photo" ? "#fff" : "var(--muted)") + '">Photo</button>'
+    + '</div>';
   html += '<select id="nMealTime" onchange="state.nMealTime=this.value" style="background:var(--bg);border:1.5px solid var(--b1);border-radius:8px;padding:11px;color:var(--txt);font-family:Barlow,sans-serif;font-size:13px;outline:none;width:100%;margin-bottom:10px">'
     + MEAL_TIMES.map(function (t) { return '<option ' + (state.nMealTime === t ? "selected" : "") + '>' + t + '</option>'; }).join("")
     + '</select>';
+  if (state.nMode === "voice") {
+    html += '<div style="display:flex;flex-direction:column;align-items:center;margin-bottom:10px">'
+      + '<button onclick="toggleTrainerNutritionListening()" id="nVoiceBtn" style="width:64px;height:64px;border-radius:50%;border:none;cursor:pointer;background:' + (trainerNutritionListening ? "var(--red)" : "var(--teal)") + ';color:#fff;font-size:26px;display:flex;align-items:center;justify-content:center;box-shadow:' + (trainerNutritionListening ? "0 0 0 8px rgba(224,82,82,0.15)" : "0 0 0 8px rgba(27,136,153,0.15)") + '">' + (trainerNutritionListening ? "■" : "🎤") + '</button>'
+      + '<div id="nVoiceStatus" style="font-size:11px;color:var(--muted);margin-top:8px">' + (trainerNutritionListening ? "Listening… tap to stop" : "Tap to speak what they ate") + '</div>'
+      + '</div>';
+  }
   if (state.nMode === "photo") {
     if (state.nPhotoBase64) {
       html += '<div style="position:relative;margin-bottom:10px">'
@@ -5112,7 +5197,7 @@ function renderNutrition() {
     }
     html += '<input id="nMealInput" placeholder="Optional note..." style="background:var(--bg);border:1.5px solid var(--b1);border-radius:8px;padding:11px;color:var(--txt);font-family:Barlow,sans-serif;font-size:13px;outline:none;width:100%;margin-bottom:10px"/>';
   } else {
-    html += '<textarea id="nMealInput" placeholder="Describe your meal... e.g. 3 eggs, 2 toast, 1 tbsp butter, coffee" style="background:var(--bg);border:1.5px solid var(--b1);border-radius:8px;padding:11px;color:var(--txt);font-family:Barlow,sans-serif;font-size:13px;outline:none;width:100%;min-height:70px;resize:vertical;margin-bottom:10px"></textarea>';
+    html += '<textarea id="nMealInput" placeholder="' + (state.nMode === "voice" ? "Transcribed meal will appear here — feel free to edit it" : "Describe your meal... e.g. 3 eggs, 2 toast, 1 tbsp butter, coffee") + '" style="background:var(--bg);border:1.5px solid var(--b1);border-radius:8px;padding:11px;color:var(--txt);font-family:Barlow,sans-serif;font-size:13px;outline:none;width:100%;min-height:70px;resize:vertical;margin-bottom:10px"></textarea>';
   }
   html += '<button class="bp" onclick="runMealAnalysis(\'' + (state.nMode === "photo" ? "photo" : "text") + '\')" ' + (state.nAnalyzing ? "disabled" : "") + '>'
     + (state.nAnalyzing ? "Analyzing..." : "Analyze with AI") + '</button>';
