@@ -513,6 +513,25 @@ body{font-family:'Barlow',sans-serif;color:var(--txt)}
   </div>
 </div>
 
+<div class="overlay" id="newFoodSheet">
+  <div class="sheet">
+    <div class="hdl"></div>
+    <div class="stitle">Add Food to Library</div>
+    <div class="f"><label>Food Name</label><input id="ff_name" placeholder="e.g. Grilled Chicken Breast"/></div>
+    <div class="fr2">
+      <div class="f"><label>Calories</label><input type="number" id="ff_calories" placeholder="140"/></div>
+      <div class="f"><label>Serving</label><input id="ff_serving" placeholder="e.g. 3 oz"/></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+      <div class="f"><label>Protein (g)</label><input type="number" id="ff_protein" placeholder="26"/></div>
+      <div class="f"><label>Carbs (g)</label><input type="number" id="ff_carbs" placeholder="0"/></div>
+      <div class="f"><label>Fat (g)</label><input type="number" id="ff_fat" placeholder="3"/></div>
+    </div>
+    <button class="bp" onclick="saveNewFood()">Add to Library</button>
+    <button class="bg_" onclick="closeSheet('newFoodSheet')">Cancel</button>
+  </div>
+</div>
+
 <div class="overlay" id="logExSheet">
   <div class="sheet">
     <div class="hdl"></div>
@@ -857,6 +876,7 @@ function renderClients() {
   if(state.clientsSubView === "intakeResponses") return renderIntakeFormResponses();
   if(state.clientsSubView === "completed") return renderCompletedWorkoutsCalendar();
   if(state.clientsSubView === "payments") return renderPayments();
+  if(state.clientsSubView === "foodLibrary") return renderFoodLibrary();
   var inactiveCount = state.clients.filter(function(c){ return c.active === false; }).length;
   var visibleClients = state.showInactiveClients ? state.clients : state.clients.filter(function(c){ return c.active !== false; });
   var fC = visibleClients.filter(function(c){ return c.name.toLowerCase().includes(state.srch.toLowerCase()); });
@@ -867,6 +887,7 @@ function renderClients() {
   html += '<button class="chip" style="cursor:pointer;color:var(--gold)" onclick="setClientsSubView(\'library\')">📚 Library</button>';
   html += '<button class="chip" style="cursor:pointer;color:var(--gold)" onclick="setClientsSubView(\'forms\')">📋 Forms</button>';
   html += '<button class="chip" style="cursor:pointer;color:var(--green)" onclick="setClientsSubView(\'payments\')">💳 Payments</button>';
+  html += '<button class="chip" style="cursor:pointer;color:var(--gold)" onclick="setClientsSubView(\'foodLibrary\')">🍎 Food Library</button>';
   html += '</div>';
   html += '<div class="imp-banner" onclick="document.getElementById(\'gtFile\').click()">'
     +'<span style="font-size:24px;flex-shrink:0">📥</span>'
@@ -3605,6 +3626,77 @@ async function loadResourceLibrary() {
   } catch(e) { /* non-fatal */ }
 }
 loadResourceLibrary();
+
+// ── FOOD LIBRARY MODULE ──
+state.foodLibrary = [];
+
+async function loadFoodLibrary() {
+  try {
+    state.foodLibrary = await api("food_library?client_id=is.null&order=name.asc") || [];
+    if(state.clientsSubView === "foodLibrary") renderMain();
+  } catch(e) { /* non-fatal */ }
+}
+loadFoodLibrary();
+
+function openNewFoodSheet() {
+  ["ff_name","ff_calories","ff_protein","ff_carbs","ff_fat","ff_serving"].forEach(function(id){
+    document.getElementById(id).value = "";
+  });
+  openSheet("newFoodSheet");
+}
+
+async function saveNewFood() {
+  var name = document.getElementById("ff_name").value.trim();
+  if(!name) { showToast("Name this food"); return; }
+  try {
+    var saved = await api("food_library", { method:"POST", body: JSON.stringify({
+      client_id: null,
+      name: name,
+      calories: +document.getElementById("ff_calories").value || 0,
+      protein: +document.getElementById("ff_protein").value || 0,
+      carbs: +document.getElementById("ff_carbs").value || 0,
+      fat: +document.getElementById("ff_fat").value || 0,
+      serving_note: document.getElementById("ff_serving").value.trim() || null
+    })});
+    state.foodLibrary.push(saved[0]);
+    state.foodLibrary.sort(function(a,b){ return a.name.localeCompare(b.name); });
+    closeSheet("newFoodSheet");
+    showToast("Added to Food Library ✓");
+    renderMain();
+  } catch(e) { showToast("Could not add food"); }
+}
+
+async function deleteFood(id) {
+  if(!confirm("Remove this food from the standard library?")) return;
+  try {
+    await api("food_library?id=eq."+id, { method:"DELETE" });
+    state.foodLibrary = state.foodLibrary.filter(function(f){ return f.id !== id; });
+    renderMain();
+  } catch(e) { showToast("Could not remove"); }
+}
+
+function renderFoodLibrary() {
+  var html = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">';
+  html += '<div style="display:flex;align-items:center;gap:10px">';
+  html += '<button onclick="setClientsSubView(\'list\')" style="background:var(--s1);border:1px solid var(--b1);color:var(--txt);border-radius:8px;padding:8px 12px;cursor:pointer;font-size:14px">←</button>';
+  html += '<div style="font-size:15px;font-weight:700">Food Library</div>';
+  html += '</div>';
+  html += '<button class="bgold" style="width:auto;margin:0;padding:9px 14px" onclick="openNewFoodSheet()">+ Add Food</button>';
+  html += '</div>';
+  html += '<div style="font-size:11px;color:var(--muted);margin-bottom:12px">These common foods are available to every client when they log meals — a quick-pick shortcut alongside their own personal saved foods.</div>';
+  if(!state.foodLibrary.length) {
+    html += '<div class="empty"><span style="font-size:36px;display:block;margin-bottom:10px">🍎</span>No foods yet</div>';
+    return html;
+  }
+  state.foodLibrary.forEach(function(f){
+    html += '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:8px;padding:10px 12px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">';
+    html += '<div><div style="font-size:13px;font-weight:700">'+esc(f.name)+'</div>';
+    html += '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+f.calories+' cal · '+f.protein+'p / '+f.carbs+'c / '+f.fat+'f'+(f.serving_note?' · '+esc(f.serving_note):'')+'</div></div>';
+    html += '<button onclick="deleteFood(\''+f.id+'\')" style="background:rgba(224,82,82,0.1);border:1px solid rgba(224,82,82,0.25);color:var(--red);border-radius:6px;padding:6px 10px;font-size:11px;cursor:pointer">✕</button>';
+    html += '</div>';
+  });
+  return html;
+}
 
 // ── INTAKE FORMS MODULE ──
 state.intakeForms = [];
