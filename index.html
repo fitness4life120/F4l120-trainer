@@ -2307,7 +2307,7 @@ function addToLibrary() {
   if(!cat) return;
   var idx = parseInt(cat) - 1;
   var category = (idx >= 0 && idx < cats.length) ? cats[idx] : "Full Body";
-  EXERCISES.push({name: name, category: category});
+  EXERCISES.push({name: name, category: category, is_custom: true});
   EXERCISES.sort(function(a,b){ return a.name.localeCompare(b.name); });
   var banner = document.getElementById("addToLibBanner");
   if(banner) banner.style.display = "none";
@@ -2375,6 +2375,46 @@ async function removeExerciseVideo(name) {
   delete state.exerciseVideos[name];
 }
 
+function editCustomExercise(oldName) {
+  var ex = EXERCISES.find(function(e){ return e.name === oldName && e.is_custom; });
+  if(!ex) return;
+  var newName = prompt("Exercise name:", ex.name);
+  if(newName === null) return;
+  newName = newName.trim();
+  if(!newName) { showToast("Name can't be empty"); return; }
+  var cats = ["Chest","Back","Shoulders","Biceps","Triceps","Legs","Glutes","Core","Cardio","Full Body"];
+  var catInput = prompt("Muscle group:\n\n" + cats.map(function(c,i){ return (i+1)+". "+c; }).join("\n"), (cats.indexOf(ex.category)+1)||1);
+  if(catInput === null) return;
+  var idx = parseInt(catInput) - 1;
+  var newCategory = (idx >= 0 && idx < cats.length) ? cats[idx] : ex.category;
+
+  api("custom_exercises?name=eq." + encodeURIComponent(oldName), {
+    method: "PATCH",
+    body: JSON.stringify({ name: newName, category: newCategory })
+  }).then(function(){
+    ex.name = newName;
+    ex.category = newCategory;
+    if(newName !== oldName && state.exerciseVideos[oldName]) {
+      state.exerciseVideos[newName] = state.exerciseVideos[oldName];
+      delete state.exerciseVideos[oldName];
+    }
+    EXERCISES.sort(function(a,b){ return a.name.localeCompare(b.name); });
+    showToast("Exercise updated ✓");
+    renderMain();
+  }).catch(function(){ showToast("Could not update exercise"); });
+}
+
+function deleteCustomExercise(name) {
+  if(!confirm('Delete "' + name + '" from your library? This won\'t remove it from any past logs or plans that already reference it.')) return;
+  api("custom_exercises?name=eq." + encodeURIComponent(name), { method: "DELETE" })
+    .then(function(){
+      var idx = EXERCISES.findIndex(function(e){ return e.name === name && e.is_custom; });
+      if(idx > -1) EXERCISES.splice(idx, 1);
+      showToast("Exercise removed");
+      renderMain();
+    }).catch(function(){ showToast("Could not remove exercise"); });
+}
+
 function promptExerciseVideo(name) {
   var current = state.exerciseVideos[name] || "";
   var url = window.prompt('YouTube demo link for "' + name + '":', current);
@@ -2403,10 +2443,14 @@ function renderLibrary() {
     filtered.slice(0,50).forEach(function(e){
       var hasVid = !!state.exerciseVideos[e.name];
       html += '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:7px;padding:10px 12px;margin-bottom:5px;display:flex;justify-content:space-between;align-items:center;gap:8px">';
-      html += '<span style="font-size:13px;font-weight:500">'+e.name+'</span>';
+      html += '<span style="font-size:13px;font-weight:500">'+e.name+(e.is_custom?' <span style="font-size:9px;color:var(--gold);background:var(--gold2);border-radius:3px;padding:1px 5px;margin-left:4px">CUSTOM</span>':'')+'</span>';
       html += '<div style="display:flex;align-items:center;gap:6px;flex-shrink:0">';
       html += '<span style="font-size:10px;color:var(--muted);background:var(--soft);border-radius:3px;padding:1px 6px">'+e.category+'</span>';
       html += '<button onclick="promptExerciseVideo(\''+e.name.replace(/'/g,"\\'")+'\')" title="'+(hasVid?"Edit video link":"Add video link")+'" style="background:'+(hasVid?"rgba(45,186,128,0.12)":"transparent")+';border:1px solid '+(hasVid?"rgba(45,186,128,0.3)":"var(--b1)")+';color:'+(hasVid?"var(--green)":"var(--muted)")+';border-radius:6px;padding:4px 7px;font-size:12px;cursor:pointer;line-height:1">🎥</button>';
+      if(e.is_custom) {
+        html += '<button onclick="editCustomExercise(\''+e.name.replace(/'/g,"\\'")+'\')" title="Edit exercise" style="background:transparent;border:1px solid var(--b1);color:var(--muted);border-radius:6px;padding:4px 7px;font-size:12px;cursor:pointer;line-height:1">✏️</button>';
+        html += '<button onclick="deleteCustomExercise(\''+e.name.replace(/'/g,"\\'")+'\')" title="Delete exercise" style="background:rgba(224,82,82,0.1);border:1px solid rgba(224,82,82,0.25);color:var(--red);border-radius:6px;padding:4px 7px;font-size:12px;cursor:pointer;line-height:1">🗑️</button>';
+      }
       html += '</div>';
       html += '</div>';
     });
@@ -2420,8 +2464,14 @@ function renderLibrary() {
       catEx.forEach(function(e){
         var hasVid = !!state.exerciseVideos[e.name];
         html += '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:6px;padding:9px 12px;margin-bottom:4px;font-size:13px;display:flex;justify-content:space-between;align-items:center;gap:8px">';
-        html += '<span>'+e.name+'</span>';
-        html += '<button onclick="promptExerciseVideo(\''+e.name.replace(/'/g,"\\'")+'\')" title="'+(hasVid?"Edit video link":"Add video link")+'" style="background:'+(hasVid?"rgba(45,186,128,0.12)":"transparent")+';border:1px solid '+(hasVid?"rgba(45,186,128,0.3)":"var(--b1)")+';color:'+(hasVid?"var(--green)":"var(--muted)")+';border-radius:6px;padding:4px 7px;font-size:12px;cursor:pointer;line-height:1;flex-shrink:0">🎥</button>';
+        html += '<span>'+e.name+(e.is_custom?' <span style="font-size:9px;color:var(--gold);background:var(--gold2);border-radius:3px;padding:1px 5px;margin-left:4px">CUSTOM</span>':'')+'</span>';
+        html += '<div style="display:flex;align-items:center;gap:6px;flex-shrink:0">';
+        html += '<button onclick="promptExerciseVideo(\''+e.name.replace(/'/g,"\\'")+'\')" title="'+(hasVid?"Edit video link":"Add video link")+'" style="background:'+(hasVid?"rgba(45,186,128,0.12)":"transparent")+';border:1px solid '+(hasVid?"rgba(45,186,128,0.3)":"var(--b1)")+';color:'+(hasVid?"var(--green)":"var(--muted)")+';border-radius:6px;padding:4px 7px;font-size:12px;cursor:pointer;line-height:1">🎥</button>';
+        if(e.is_custom) {
+          html += '<button onclick="editCustomExercise(\''+e.name.replace(/'/g,"\\'")+'\')" title="Edit exercise" style="background:transparent;border:1px solid var(--b1);color:var(--muted);border-radius:6px;padding:4px 7px;font-size:12px;cursor:pointer;line-height:1">✏️</button>';
+          html += '<button onclick="deleteCustomExercise(\''+e.name.replace(/'/g,"\\'")+'\')" title="Delete exercise" style="background:rgba(224,82,82,0.1);border:1px solid rgba(224,82,82,0.25);color:var(--red);border-radius:6px;padding:4px 7px;font-size:12px;cursor:pointer;line-height:1">🗑️</button>';
+        }
+        html += '</div>';
         html += '</div>';
       });
       html += '</div>';
@@ -3110,7 +3160,7 @@ async function loadCustomExercises() {
     var rows = await api("custom_exercises?select=name,category");
     (rows||[]).forEach(function(e){
       if(!EXERCISES.some(function(ex){ return ex.name.toLowerCase() === e.name.toLowerCase(); })) {
-        EXERCISES.push({name: e.name, category: e.category});
+        EXERCISES.push({name: e.name, category: e.category, is_custom: true});
       }
     });
 
@@ -3124,7 +3174,7 @@ async function loadCustomExercises() {
         if(!known[e.name.toLowerCase()]) {
           try {
             await api("custom_exercises", { method:"POST", body: JSON.stringify({name: e.name, category: e.category}) });
-            if(!EXERCISES.some(function(ex){ return ex.name.toLowerCase() === e.name.toLowerCase(); })) EXERCISES.push(e);
+            if(!EXERCISES.some(function(ex){ return ex.name.toLowerCase() === e.name.toLowerCase(); })) EXERCISES.push({name: e.name, category: e.category, is_custom: true});
           } catch(e2) { /* likely already exists on server from another device — skip */ }
         }
       }
