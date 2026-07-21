@@ -2758,7 +2758,7 @@ function renderLogExBlocks() {
     html += '<div style="margin-bottom:14px;padding-bottom:'+(idx<logExBlockIds.length-1?'14px':'0')+';border-bottom:'+(idx<logExBlockIds.length-1?'1px dashed var(--b1)':'none')+'">';
     if(logExBlockIds.length>1) html += '<div style="font-size:10px;color:var(--teal2);font-weight:700;margin-bottom:4px">Exercise '+(idx+1)+'</div>';
     html += '<div style="display:flex;gap:6px;margin-bottom:8px">';
-    html += '<input placeholder="Exercise name" id="le_exercise_'+bid+'" style="flex:1;background:var(--bg);border:1.5px solid var(--b1);border-radius:8px;padding:11px;color:var(--txt);font-family:Barlow,sans-serif;font-size:14px;outline:none">';
+    html += '<input placeholder="Exercise name" id="le_exercise_'+bid+'" list="exerciseNamesList" autocomplete="off" style="flex:1;background:var(--bg);border:1.5px solid var(--b1);border-radius:8px;padding:11px;color:var(--txt);font-family:Barlow,sans-serif;font-size:14px;outline:none">';
     if(logExBlockIds.length>1) html += '<button onclick="removeLogExBlock('+bid+')" style="background:transparent;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:0 6px;flex-shrink:0">✕</button>';
     html += '</div>';
     html += '<div class="f"><label>Muscle Group</label><select id="le_muscle_'+bid+'"><option>Chest</option><option>Back</option><option>Shoulders</option><option>Biceps</option><option>Triceps</option><option>Legs</option><option>Glutes</option><option>Core</option><option>Cardio</option><option>Full Body</option></select></div>';
