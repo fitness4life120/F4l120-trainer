@@ -117,6 +117,7 @@ body{font-family:'Barlow',sans-serif;color:var(--txt)}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
+<datalist id="exerciseNamesList"></datalist>
 <input type="file" id="gtFile" accept=".json" style="display:none"/>
 <div class="toast" id="toast"></div>
 
@@ -268,7 +269,7 @@ body{font-family:'Barlow',sans-serif;color:var(--txt)}
     <div class="f"><label>Workout Label</label><input id="dp_label" placeholder="e.g. Push Day, Leg Day, HIIT"/></div>
     <div class="sdiv"></div>
     <div style="font-family:Barlow Condensed;font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;font-weight:700;margin-bottom:10px">Add Exercises</div>
-    <div class="f"><label>Exercise Name</label><input id="dp_exname" placeholder="e.g. Bench Press"/></div>
+    <div class="f"><label>Exercise Name</label><input id="dp_exname" list="exerciseNamesList" placeholder="e.g. Bench Press" autocomplete="off"/></div>
     <div class="fr3">
       <div class="f"><label>Sets</label><input type="number" id="dp_sets" placeholder="3" value="3"/></div>
       <div class="f"><label id="dp_reps_label">Reps</label><input id="dp_reps" placeholder="10" value="10"/></div>
@@ -316,7 +317,7 @@ body{font-family:'Barlow',sans-serif;color:var(--txt)}
     <div class="f"><label>Workout Label</label><input id="ow_label" placeholder="e.g. Bonus Core Circuit, Optional Cardio"/></div>
     <div class="sdiv"></div>
     <div style="font-family:Barlow Condensed;font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;font-weight:700;margin-bottom:10px">Add Exercises</div>
-    <div class="f"><label>Exercise Name</label><input id="ow_exname" placeholder="e.g. Bench Press"/></div>
+    <div class="f"><label>Exercise Name</label><input id="ow_exname" list="exerciseNamesList" placeholder="e.g. Bench Press" autocomplete="off"/></div>
     <div class="fr3">
       <div class="f"><label>Sets</label><input type="number" id="ow_sets" placeholder="3" value="3"/></div>
       <div class="f"><label id="ow_reps_label">Reps</label><input id="ow_reps" placeholder="10" value="10"/></div>
@@ -1155,6 +1156,7 @@ function editOWExercise(idx) {
   editingOWIndex = idx;
   document.getElementById("owAddBtn").textContent = "Update Exercise";
   document.getElementById("owCancelEditWrap").style.display = "block";
+  document.getElementById("ow_exname").scrollIntoView({behavior:"smooth", block:"center"});
 }
 
 function addOWExercise() {
@@ -1330,6 +1332,7 @@ function editDPExercise(idx) {
   editingDPIndex = idx;
   document.getElementById("dpAddBtn").textContent = "Update Exercise";
   document.getElementById("dpCancelEditWrap").style.display = "block";
+  document.getElementById("dp_exname").scrollIntoView({behavior:"smooth", block:"center"});
 }
 
 function addDPExercise() {
@@ -1511,6 +1514,7 @@ function renderExCardTrainer(ex) {
   html += '</div>';
   html += '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+ex.sets+'×'+ex.reps+(ex.each_side?' each':'')+(ex.weight?' @ '+esc(ex.weight)+' lbs':'')+(ex.muscle?' · '+esc(ex.muscle):'')+(ex.rest?' · Rest '+esc(ex.rest):'')+'</div>';
   if(pr) html += '<div style="font-size:10px;color:var(--gold);margin-top:2px;font-weight:700">🏆 PR: '+pr.weight+' lbs × '+pr.reps+(pr.log_type==="time"?" sec":"")+'</div>';
+  html += '<button onclick="logPlanExFromTrainerByName(\''+ex.name.replace(/'/g,"\\'")+'\',\''+(ex.group||"")+'\')" style="background:var(--teal3);border:1px solid var(--teal);color:var(--teal2);border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;margin-top:6px">Log It</button>';
   html += '</div>';
   return html;
 }
@@ -2297,6 +2301,13 @@ function filterExercises() {
   suggest.style.display = "block";
 }
 
+function populateExerciseDatalist() {
+  var list = document.getElementById("exerciseNamesList");
+  if(!list) return;
+  var sorted = EXERCISES.slice().sort(function(a,b){ return a.name.localeCompare(b.name); });
+  list.innerHTML = sorted.map(function(e){ return '<option value="'+esc(e.name)+'">'; }).join("");
+}
+
 function addToLibrary() {
   var input = document.getElementById("qex");
   if(!input || !input.value.trim()) return;
@@ -2311,6 +2322,7 @@ function addToLibrary() {
   var category = (idx >= 0 && idx < cats.length) ? cats[idx] : "Full Body";
   EXERCISES.push({name: name, category: category, is_custom: true});
   EXERCISES.sort(function(a,b){ return a.name.localeCompare(b.name); });
+  populateExerciseDatalist();
   var banner = document.getElementById("addToLibBanner");
   if(banner) banner.style.display = "none";
   api("custom_exercises", { method:"POST", body: JSON.stringify({name: name, category: category}) })
@@ -2401,6 +2413,7 @@ function editCustomExercise(oldName) {
       delete state.exerciseVideos[oldName];
     }
     EXERCISES.sort(function(a,b){ return a.name.localeCompare(b.name); });
+    populateExerciseDatalist();
     showToast("Exercise updated ✓");
     renderMain();
   }).catch(function(){ showToast("Could not update exercise"); });
@@ -2412,6 +2425,7 @@ function deleteCustomExercise(name) {
     .then(function(){
       var idx = EXERCISES.findIndex(function(e){ return e.name === name && e.is_custom; });
       if(idx > -1) EXERCISES.splice(idx, 1);
+      populateExerciseDatalist();
       showToast("Exercise removed");
       renderMain();
     }).catch(function(){ showToast("Could not remove exercise"); });
@@ -2775,6 +2789,48 @@ function removeLogExBlock(bid) {
   delete setRowCounts["le"+bid];
   delete logExBlockTypes[bid];
   renderLogExBlocks();
+}
+
+function logPlanExFromTrainerByName(exName, groupId) {
+  var plan = state.datedPlans.find(function(p){ return p.date === state.selCalDate; });
+  if(!plan) { showToast("Could not find that day's plan"); return; }
+  var allEx = plan.exercises || [];
+  var ex = allEx.find(function(e){ return e.name === exName; });
+  if(!ex) { showToast("Could not find that exercise"); return; }
+  var groupMembers = groupId ? allEx.filter(function(e){ return e.group === groupId; }) : null;
+  logPlanExFromTrainer(ex, groupMembers);
+}
+
+function logPlanExFromTrainer(ex, groupMembers) {
+  var sheet = document.getElementById("logExSheet");
+  if(!sheet) { showToast("Sheet not found"); return; }
+  var a = getActive(); if(!a) return;
+  document.getElementById("logExClientName").textContent = a.name;
+  document.getElementById("le_notes").value = "";
+  document.getElementById("le_date").value = tod();
+
+  var members = (groupMembers && groupMembers.length) ? groupMembers : [ex];
+  logExBlockIds = members.map(function(_, i){ return i; });
+  logExNextBlockId = members.length;
+  logExBlockTypes = {};
+  members.forEach(function(m, i){ logExBlockTypes[i] = m.type === "time" ? "time" : "reps"; });
+  renderLogExBlocks();
+
+  members.forEach(function(m, i){
+    var exEl = document.getElementById("le_exercise_"+i);
+    if(exEl) exEl.value = m.name;
+    var muscleEl = document.getElementById("le_muscle_"+i);
+    if(muscleEl && m.muscle) {
+      for(var j=0;j<muscleEl.options.length;j++){ if(muscleEl.options[j].value === m.muscle) muscleEl.selectedIndex = j; }
+    }
+    var setCount = +m.sets || 3;
+    var prefillRows = [];
+    for(var s=0;s<setCount;s++){ prefillRows.push({reps: m.reps || "", weight: m.weight || ""}); }
+    setRowCounts["le"+i] = setCount;
+    renderSetRows("le"+i, "logExSetRowsList_"+i, prefillRows, m.type==="time");
+  });
+
+  openSheet("logExSheet");
 }
 
 function openLogEx() {
@@ -3184,9 +3240,11 @@ async function loadCustomExercises() {
     }
 
     EXERCISES.sort(function(a,b){ return a.name.localeCompare(b.name); });
+    populateExerciseDatalist();
     renderMain();
   } catch(e) { /* non-fatal — falls back to the base 549-exercise list */ }
 }
+populateExerciseDatalist();
 loadCustomExercises();
 
 // ── MESSAGING MODULE ──
