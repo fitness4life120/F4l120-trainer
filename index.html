@@ -5220,18 +5220,19 @@ function renderNutrition() {
   var wTotals = loggedDayGroups.reduce(function (acc, g) {
     var dt = g.reduce(function (a, m) {
       a.calories += (+m.calories || 0); a.protein_g += (+m.protein_g || 0);
-      a.carbs_g += (+m.carbs_g || 0); a.fat_g += (+m.fat_g || 0);
+      a.carbs_g += (+m.carbs_g || 0); a.fat_g += (+m.fat_g || 0); a.fiber_g += (+m.fiber_g || 0);
       return a;
-    }, { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 });
+    }, { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0 });
     acc.calories += dt.calories; acc.protein_g += dt.protein_g;
-    acc.carbs_g += dt.carbs_g; acc.fat_g += dt.fat_g;
+    acc.carbs_g += dt.carbs_g; acc.fat_g += dt.fat_g; acc.fiber_g += dt.fiber_g;
     return acc;
-  }, { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 });
+  }, { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0 });
   var loggedCount = loggedDayGroups.length;
   var avgCal = loggedCount ? Math.round(wTotals.calories / loggedCount) : 0;
   var avgPro = loggedCount ? Math.round(wTotals.protein_g / loggedCount) : 0;
   var avgCarb = loggedCount ? Math.round(wTotals.carbs_g / loggedCount) : 0;
   var avgFat = loggedCount ? Math.round(wTotals.fat_g / loggedCount) : 0;
+  var avgFiber = loggedCount ? Math.round(wTotals.fiber_g / loggedCount) : 0;
   var wLabel = new Date(weekDates[0] + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })
     + " – " + new Date(weekDates[6] + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
@@ -5270,10 +5271,11 @@ function renderNutrition() {
         + '<div style="font-family:Barlow Condensed;font-size:26px;font-weight:900;color:var(--teal2)">' + avgCal + '</div>'
         + '<div style="font-size:11px;color:var(--muted)">avg kcal/day &middot; ' + loggedCount + ' of 7 days logged</div>'
         + '</div>'
-        + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">'
+        + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">'
         + macroBox("Avg Protein", avgPro, null, "#4fc3f7")
         + macroBox("Avg Carbs", avgCarb, null, "#ffd54f")
         + macroBox("Avg Fat", avgFat, null, "#ef9a9a")
+        + macroBox("Avg Fiber", avgFiber, null, "#a5d6a7")
         + '</div>')
     + '</div>';
   html += '<div class="card">'
