@@ -4940,6 +4940,7 @@ state.nMealTime = "Breakfast";
 state.nPhotoBase64 = null;
 state.nPhotoMediaType = null;
 state.nMode = "text";
+state.nSaveToLibrary = false;
 
 var MEAL_TIMES = ["Breakfast", "Morning Snack", "Lunch", "Afternoon Snack", "Dinner", "Evening Snack", "Pre-Workout", "Post-Workout"];
 
@@ -5043,6 +5044,14 @@ async function runMealAnalysis(mode) {
   renderMain();
 }
 
+function discardMealResult() {
+  state.nAnalysisResult = null;
+  state.nSaveToLibrary = false;
+  var input = document.getElementById("nMealInput");
+  if (input) input.value = "";
+  renderMain();
+}
+
 async function confirmLogMeal() {
   if (!state.nAnalysisResult || !state.activeId) return;
   var r = state.nAnalysisResult;
@@ -5067,9 +5076,19 @@ async function confirmLogMeal() {
       })
     });
     if (saved && saved[0]) state.nLogs.push(saved[0]);
+    if (state.nSaveToLibrary) {
+      try {
+        var libRow = await api("food_library", { method: "POST", body: JSON.stringify({
+          client_id: null, name: r.meal_name, calories: r.calories, protein: r.protein_g,
+          carbs: r.carbs_g, fat: r.fat_g, serving_note: r.serving_note
+        })});
+        if (libRow && libRow[0]) state.foodLibrary.push(libRow[0]);
+      } catch(e) { /* non-fatal */ }
+    }
     state.nAnalysisResult = null;
     state.nPhotoBase64 = null;
     state.nPhotoMediaType = null;
+    state.nSaveToLibrary = false;
     if (input) input.value = "";
     showToast("Meal logged");
     renderMain();
@@ -5412,7 +5431,11 @@ function renderNutrition() {
       + '<div style="text-align:center;background:var(--s1);border-radius:6px;padding:6px 2px"><input type="number" value="' + (r.fiber_g||0) + '" oninput="state.nAnalysisResult.fiber_g=+this.value||0" style="width:100%;background:transparent;border:none;color:#a5d6a7;font-size:14px;font-weight:700;text-align:center;outline:none"/><div style="font-size:9px;color:var(--muted)">Fiber (g)</div></div>'
       + '</div>'
       + (r.quality_notes ? '<div style="font-size:12px;color:var(--muted);font-style:italic;margin-bottom:10px">' + esc(r.quality_notes) + '</div>' : '')
-      + '<button class="bp" onclick="confirmLogMeal()">+ Add to Log</button>'
+      + '<label style="display:flex;align-items:center;gap:6px;margin-bottom:10px;cursor:pointer"><input type="checkbox" ' + (state.nSaveToLibrary?"checked":"") + ' onchange="state.nSaveToLibrary=this.checked" style="width:14px;height:14px"/><span style="font-size:11px;color:var(--muted)">Save to Food Library (available to all clients)</span></label>'
+      + '<div style="display:flex;gap:8px">'
+      + '<button class="bp" style="flex:1" onclick="confirmLogMeal()">+ Add to Log</button>'
+      + '<button onclick="discardMealResult()" style="background:rgba(224,82,82,0.15);border:1px solid rgba(224,82,82,0.3);color:var(--red);border-radius:8px;padding:0 16px;font-size:13px;font-weight:700;cursor:pointer">🗑️</button>'
+      + '</div>'
       + '</div>';
   }
   html += '</div>';
