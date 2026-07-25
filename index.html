@@ -4941,6 +4941,8 @@ state.nPhotoBase64 = null;
 state.nPhotoMediaType = null;
 state.nMode = "text";
 state.nSaveToLibrary = false;
+state.expandedMealId = null;
+state.addingToMealId = null;
 
 var MEAL_TIMES = ["Breakfast", "Morning Snack", "Lunch", "Afternoon Snack", "Dinner", "Evening Snack", "Pre-Workout", "Post-Workout"];
 
@@ -4957,7 +4959,7 @@ var NUTRITION_PROMPT_TEMPLATE = function (description) {
   return "You are a precise sports nutrition expert. Analyze this meal and return ONLY a JSON object with no markdown, no preamble:\n\n"
     + description
     + "\n\nReturn this exact shape:\n"
-    + '{"meal_name":"short clean name","calories":number,"protein_g":number,"carbs_g":number,"fat_g":number,"fiber_g":number,"serving_note":"brief portion context","quality_score":1-10,"quality_notes":"1 sentence on nutritional quality for a fitness/body recomp goal"}'
+    + '{"meal_name":"short clean name","calories":number,"protein_g":number,"carbs_g":number,"fat_g":number,"fiber_g":number,"serving_note":"brief portion context","quality_score":1-10,"quality_notes":"1-2 SPECIFIC foods this person could add or swap in to meaningfully raise the score for a fitness/body recomp goal — name actual foods (e.g. \"Add a cup of broccoli for fiber\" or \"Swap white rice for quinoa for more protein\"), not generic advice. If the meal already scores 9-10, say so instead."}'
     + "\n\nBe accurate. Use standard food database values. Round to nearest whole number.";
 };
 
@@ -5105,6 +5107,52 @@ async function deleteNutritionLog(id) {
     renderMain();
   } catch (e) {
     showToast("Could not delete");
+  }
+}
+
+function toggleMealExpanded(id) {
+  state.expandedMealId = state.expandedMealId === id ? null : id;
+  state.addingToMealId = null;
+  renderMain();
+}
+
+function openAddForgotten(id) {
+  state.addingToMealId = id;
+  renderMain();
+  setTimeout(function(){ var el = document.getElementById("forgottenInput"); if(el) el.focus(); }, 50);
+}
+
+function cancelAddForgotten() {
+  state.addingToMealId = null;
+  renderMain();
+}
+
+async function submitForgottenItem(id) {
+  var meal = state.nLogs.find(function(l){ return l.id === id; });
+  if(!meal) return;
+  var input = document.getElementById("forgottenInput");
+  var text = input ? input.value.trim() : "";
+  if(!text) { showToast("Describe what was forgotten first"); return; }
+  var btn = document.getElementById("forgottenSubmitBtn");
+  if(btn) { btn.textContent = "Updating…"; btn.disabled = true; }
+  try {
+    var combinedDescription = (meal.meal_description || meal.meal_name) + ", plus also: " + text;
+    var r = await analyzeMealText(combinedDescription);
+    var updated = await api("nutrition_logs?id=eq." + meal.id, { method: "PATCH", body: JSON.stringify({
+      meal_name: r.meal_name, meal_description: combinedDescription,
+      calories: r.calories, protein_g: r.protein_g, carbs_g: r.carbs_g, fat_g: r.fat_g, fiber_g: r.fiber_g,
+      quality_score: r.quality_score, quality_notes: r.quality_notes, serving_note: r.serving_note
+    })});
+    if(updated && updated[0]) {
+      var idx = state.nLogs.findIndex(function(l){ return l.id === meal.id; });
+      if(idx > -1) state.nLogs[idx] = updated[0];
+    }
+    state.addingToMealId = null;
+    showToast("Meal updated ✓");
+    renderMain();
+  } catch(e) {
+    showToast("Could not update meal");
+    if(btn) { btn.textContent = "Update Meal"; btn.disabled = false; }
   }
 }
 
@@ -5447,18 +5495,48 @@ function renderNutrition() {
       if (!meals.length) return;
       html += '<div class="dh"><span class="dl">' + mt + '</span><div class="dline"></div><span class="dc">' + meals.length + '</span></div>';
       meals.forEach(function (m) {
+        var isExpanded = state.expandedMealId === m.id;
         html += '<div class="exr">'
-          + '<div class="exr-top">'
+          + '<div class="exr-top" onclick="toggleMealExpanded(\'' + m.id + '\')" style="cursor:pointer">'
           + '<span class="exr-name">' + esc(m.meal_name) + '</span>'
           + (m.quality_score ? '<span class="chip" style="color:' + (m.quality_score >= 8 ? "var(--green)" : m.quality_score >= 6 ? "var(--gold)" : "var(--red)") + '">' + m.quality_score + '/10</span>' : '')
-          + '<button onclick="deleteNutritionLog(\'' + m.id + '\')" style="background:rgba(224,82,82,0.15);border:1px solid rgba(224,82,82,0.3);color:#e05252;cursor:pointer;font-size:12px;padding:4px 8px;border-radius:5px;flex-shrink:0;margin-left:auto">X</button>'
+          + '<button onclick="event.stopPropagation();deleteNutritionLog(\'' + m.id + '\')" style="background:rgba(224,82,82,0.15);border:1px solid rgba(224,82,82,0.3);color:#e05252;cursor:pointer;font-size:12px;padding:4px 8px;border-radius:5px;flex-shrink:0;margin-left:auto">X</button>'
           + '</div>'
-          + '<div style="display:flex;gap:8px;flex-wrap:wrap">'
+          + '<div style="display:flex;gap:8px;flex-wrap:wrap;cursor:pointer" onclick="toggleMealExpanded(\'' + m.id + '\')">'
           + '<span class="chip t">' + m.calories + ' kcal</span>'
           + '<span class="chip">P ' + m.protein_g + 'g</span>'
           + '<span class="chip">C ' + m.carbs_g + 'g</span>'
           + '<span class="chip">F ' + m.fat_g + 'g</span>'
-          + '</div></div>';
+          + '</div>';
+        if(isExpanded) {
+          html += '<div style="background:var(--bg);border:1px solid var(--b1);border-radius:8px;padding:12px;margin-top:8px">';
+          if(m.meal_description) html += '<div style="font-size:12px;color:var(--txt);margin-bottom:8px">' + esc(m.meal_description) + '</div>';
+          html += '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:8px">'
+            + '<div style="text-align:center"><div style="font-size:13px;font-weight:700">' + m.calories + '</div><div style="font-size:9px;color:var(--muted)">Cal</div></div>'
+            + '<div style="text-align:center"><div style="font-size:13px;font-weight:700;color:#4fc3f7">' + m.protein_g + 'g</div><div style="font-size:9px;color:var(--muted)">Pro</div></div>'
+            + '<div style="text-align:center"><div style="font-size:13px;font-weight:700;color:#ffd54f">' + m.carbs_g + 'g</div><div style="font-size:9px;color:var(--muted)">Carb</div></div>'
+            + '<div style="text-align:center"><div style="font-size:13px;font-weight:700;color:#ef9a9a">' + m.fat_g + 'g</div><div style="font-size:9px;color:var(--muted)">Fat</div></div>'
+            + '<div style="text-align:center"><div style="font-size:13px;font-weight:700;color:#a5d6a7">' + (m.fiber_g||0) + 'g</div><div style="font-size:9px;color:var(--muted)">Fiber</div></div>'
+            + '</div>';
+          if(m.serving_note) html += '<div style="font-size:11px;color:var(--muted);margin-bottom:6px">' + esc(m.serving_note) + '</div>';
+          if(m.quality_notes) {
+            html += '<div style="background:var(--teal3);border:1px solid var(--teal);border-radius:6px;padding:8px;margin-bottom:10px">'
+              + '<div style="font-size:10px;color:var(--teal2);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px">Boost this score</div>'
+              + '<div style="font-size:12px;color:var(--txt)">' + esc(m.quality_notes) + '</div>'
+              + '</div>';
+          }
+          if(state.addingToMealId === m.id) {
+            html += '<input id="forgottenInput" placeholder="What did they forget? e.g. a side of broccoli" style="background:var(--s1);border:1.5px solid var(--b1);border-radius:8px;padding:10px;color:var(--txt);font-size:13px;outline:none;width:100%;margin-bottom:8px"/>'
+              + '<div style="display:flex;gap:8px">'
+              + '<button id="forgottenSubmitBtn" class="bp" style="flex:1" onclick="submitForgottenItem(\'' + m.id + '\')">Update Meal</button>'
+              + '<button onclick="cancelAddForgotten()" style="background:var(--s1);border:1px solid var(--b1);color:var(--muted);border-radius:8px;padding:0 14px;font-size:13px;cursor:pointer">Cancel</button>'
+              + '</div>';
+          } else {
+            html += '<button onclick="openAddForgotten(\'' + m.id + '\')" style="width:100%;background:var(--s1);border:1px dashed var(--b1);color:var(--muted);border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer">➕ Add Something Forgotten</button>';
+          }
+          html += '</div>';
+        }
+        html += '</div>';
       });
     });
   }
