@@ -5377,7 +5377,7 @@ function renderNutrition() {
     + '<button class="bg_" style="width:auto;margin:0;padding:9px 16px" onclick="shiftNutritionDay(-1)">Prev</button>'
     + '<div style="text-align:center"><div style="font-family:Barlow Condensed;font-size:16px;font-weight:800">' + nDayLabel(state.nDate) + '</div>'
     + '<div style="font-size:11px;color:var(--muted)">' + new Date(state.nDate + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric" }) + '</div></div>'
-    + '<button class="bg_" style="width:auto;margin:0;padding:9px 16px" onclick="shiftNutritionDay(1)" ' + (state.nDate >= tod() ? "disabled" : "") + '>Next</button>'
+    + '<button class="bg_" style="width:auto;margin:0;padding:9px 16px" onclick="shiftNutritionDay(1)">Next</button>'
     + '</div>';
   html += '<div class="card">'
     + '<div class="clbl">Todays Totals</div>'
