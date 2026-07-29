@@ -5453,7 +5453,7 @@ function renderNutrition() {
       html += '<label style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:130px;border:2px dashed var(--b1);border-radius:10px;cursor:pointer;color:var(--muted);background:var(--bg);margin-bottom:10px">'
         + '<div style="font-size:12px;font-weight:600">Tap to take or upload a photo</div>'
         + '<div style="font-size:10px;color:var(--muted);margin-top:2px">of your meal or a nutrition label</div>'
-        + '<input type="file" accept="image/*" capture="environment" style="display:none" onchange="onNutritionPhotoSelected(this.files[0])"/>'
+        + '<input type="file" accept="image/*" style="display:none" onchange="onNutritionPhotoSelected(this.files[0])"/>'
         + '</label>';
     }
     html += '<input id="nMealInput" placeholder="Optional note..." style="background:var(--bg);border:1.5px solid var(--b1);border-radius:8px;padding:11px;color:var(--txt);font-family:Barlow,sans-serif;font-size:13px;outline:none;width:100%;margin-bottom:10px"/>';
