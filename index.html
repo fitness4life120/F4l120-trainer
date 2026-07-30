@@ -2023,6 +2023,16 @@ function generateProgressReport() {
   showToast("Report downloaded ✓");
 }
 
+async function deleteProgressLog(id) {
+  if(!confirm("Delete this check-in? This can't be undone.")) return;
+  try {
+    await api("progress_logs?id=eq."+id, { method: "DELETE" });
+    state.cProg = state.cProg.filter(function(p){ return p.id !== id; });
+    showToast("Check-in deleted");
+    renderMain();
+  } catch(e) { showToast("Could not delete: " + e.message); }
+}
+
 function renderProgress() {
   var a = getActive();
   if(!a) return '<div class="empty"><span style="font-size:36px;display:block;margin-bottom:10px">👆</span>Select a client first</div>';
@@ -2161,7 +2171,9 @@ function renderProgress() {
       html += '<div class="prow">'
         +'<div style="font-family:Barlow Condensed;font-size:11px;color:var(--gold);font-weight:700;width:80px;flex-shrink:0">'+p.date+'</div>'
         +'<div style="flex:1"><div style="font-size:14px;font-weight:700;color:var(--teal2)">'+p.weight+' lbs</div>'+(p.body_fat?'<div style="font-size:11px;color:var(--muted)">'+p.body_fat+'% BF</div>':'')+(measureLine?'<div style="font-size:10px;color:var(--muted);margin-top:2px">'+measureLine+'</div>':'')+'</div>'
-        +badge+'</div>';
+        +badge
+        +'<button onclick="deleteProgressLog(\''+p.id+'\')" style="background:rgba(224,82,82,0.15);border:1px solid rgba(224,82,82,0.3);color:var(--red);cursor:pointer;font-size:12px;padding:4px 8px;border-radius:5px;flex-shrink:0;margin-left:8px">✕</button>'
+        +'</div>';
     });
   }
   html += '</div>';
