@@ -4973,9 +4973,27 @@ var NUTRITION_PROMPT_TEMPLATE = function (description) {
   return "You are a precise sports nutrition expert. Analyze this meal and return ONLY a JSON object with no markdown, no preamble:\n\n"
     + description
     + "\n\nReturn this exact shape:\n"
-    + '{"meal_name":"short clean name","calories":number,"protein_g":number,"carbs_g":number,"fat_g":number,"fiber_g":number,"serving_note":"brief portion context","quality_score":1-10,"quality_notes":"1-2 SPECIFIC foods this person could add or swap in to meaningfully raise the score for a fitness/body recomp goal — name actual foods (e.g. \"Add a cup of broccoli for fiber\" or \"Swap white rice for quinoa for more protein\"), not generic advice. If the meal already scores 9-10, say so instead."}'
-    + "\n\nBe accurate. Use standard food database values. Round to nearest whole number.";
+    + '{"meal_name":"short clean name","calories":number,"protein_g":number,"carbs_g":number,"fat_g":number,"fiber_g":number,"serving_note":"brief portion context","serving_grams":number,"quality_score":1-10,"quality_notes":"1-2 SPECIFIC foods this person could add or swap in to meaningfully raise the score for a fitness/body recomp goal — name actual foods (e.g. \"Add a cup of broccoli for fiber\" or \"Swap white rice for quinoa for more protein\"), not generic advice. If the meal already scores 9-10, say so instead."}'
+    + "\n\nBe accurate. Use standard food database values. Round to nearest whole number. serving_grams should be your best estimate of the total weight of the described portion, in grams.";
 };
+
+var GRADE_ONLY_PROMPT = function (name, cal, pro, carb, fat, fiber) {
+  return "You are a precise sports nutrition expert. Grade the nutritional quality of this food for a fitness/body recomp goal. Return ONLY a JSON object with no markdown, no preamble:\n\n"
+    + "Food: " + name + "\nCalories: " + cal + "\nProtein: " + pro + "g\nCarbs: " + carb + "g\nFat: " + fat + "g\nFiber: " + (fiber||0) + "g\n\n"
+    + "Return this exact shape:\n"
+    + '{"quality_score":1-10,"quality_notes":"1-2 SPECIFIC foods this person could add or pair with this to meaningfully raise the score — name actual foods, not generic advice. If it already scores 9-10, say so instead."}';
+};
+
+async function gradeKnownMealTrainer(name, cal, pro, carb, fat, fiber) {
+  var res = await fetch(NUTRITION_PROXY_URL, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 400,
+      messages: [{ role: "user", content: GRADE_ONLY_PROMPT(name, cal, pro, carb, fat, fiber) }] })
+  });
+  var data = await res.json();
+  var raw = (data.content && data.content[0] && data.content[0].text) || "{}";
+  return JSON.parse(raw.replace(/```json|```/g, "").trim());
+}
 
 async function analyzeMealText(description) {
   var res = await fetch("https://poetic-blancmange-2af485.netlify.app/.netlify/functions/claude", {
@@ -5088,7 +5106,8 @@ async function confirmLogMeal() {
         fiber_g: r.fiber_g,
         quality_score: r.quality_score,
         quality_notes: r.quality_notes,
-        serving_note: r.serving_note
+        serving_note: r.serving_note,
+        serving_grams: r.serving_grams || null
       })
     });
     if (saved && saved[0]) state.nLogs.push(saved[0]);
@@ -5096,7 +5115,7 @@ async function confirmLogMeal() {
       try {
         var libRow = await api("food_library", { method: "POST", body: JSON.stringify({
           client_id: null, name: r.meal_name, calories: r.calories, protein: r.protein_g,
-          carbs: r.carbs_g, fat: r.fat_g, serving_note: r.serving_note
+          carbs: r.carbs_g, fat: r.fat_g, serving_note: r.serving_note, serving_grams: r.serving_grams || null
         })});
         if (libRow && libRow[0]) state.foodLibrary.push(libRow[0]);
       } catch(e) { /* non-fatal */ }
@@ -5155,7 +5174,7 @@ async function submitForgottenItem(id) {
     var updated = await api("nutrition_logs?id=eq." + meal.id, { method: "PATCH", body: JSON.stringify({
       meal_name: r.meal_name, meal_description: combinedDescription,
       calories: r.calories, protein_g: r.protein_g, carbs_g: r.carbs_g, fat_g: r.fat_g, fiber_g: r.fiber_g,
-      quality_score: r.quality_score, quality_notes: r.quality_notes, serving_note: r.serving_note
+      quality_score: r.quality_score, quality_notes: r.quality_notes, serving_note: r.serving_note, serving_grams: r.serving_grams || null
     })});
     if(updated && updated[0]) {
       var idx = state.nLogs.findIndex(function(l){ return l.id === meal.id; });
@@ -5307,13 +5326,28 @@ async function lookupBarcodeFoodTrainer(barcode) {
     var carb = hasServing ? n["carbohydrates_serving"] : n["carbohydrates_100g"];
     var fat = hasServing ? n["fat_serving"] : n["fat_100g"];
     var fiber = hasServing ? n["fiber_serving"] : n["fiber_100g"];
+    var servingGrams = hasServing ? (p.serving_quantity || null) : 100;
+    var productName = p.product_name || "Scanned Product";
+    var roundedCal = Math.round(cal||0), roundedPro = Math.round(pro||0), roundedCarb = Math.round(carb||0), roundedFat = Math.round(fat||0), roundedFiber = Math.round(fiber||0);
     state.nAnalysisResult = {
-      meal_name: p.product_name || "Scanned Product",
-      calories: Math.round(cal||0), protein_g: Math.round(pro||0),
-      carbs_g: Math.round(carb||0), fat_g: Math.round(fat||0), fiber_g: Math.round(fiber||0),
+      meal_name: productName,
+      calories: roundedCal, protein_g: roundedPro,
+      carbs_g: roundedCarb, fat_g: roundedFat, fiber_g: roundedFiber,
       quality_score: null, quality_notes: null,
-      serving_note: hasServing ? (p.serving_size || "1 serving") : "per 100g — adjust for actual serving"
+      serving_note: hasServing ? (p.serving_size || "1 serving") : "per 100g — adjust for actual serving",
+      serving_grams: servingGrams, grading: true
     };
+    renderMain();
+    gradeKnownMealTrainer(productName, roundedCal, roundedPro, roundedCarb, roundedFat, roundedFiber).then(function(g){
+      if(state.nAnalysisResult && state.nAnalysisResult.meal_name === productName) {
+        state.nAnalysisResult.quality_score = g.quality_score;
+        state.nAnalysisResult.quality_notes = g.quality_notes;
+        state.nAnalysisResult.grading = false;
+        renderMain();
+      }
+    }).catch(function(){
+      if(state.nAnalysisResult) { state.nAnalysisResult.grading = false; renderMain(); }
+    });
     if(statusEl) statusEl.textContent = "";
     stopTrainerBarcodeScan();
   } catch(e) {
@@ -5479,11 +5513,12 @@ function renderNutrition() {
   if (state.nAnalysisResult) {
     var r = state.nAnalysisResult;
     var qColor = r.quality_score >= 8 ? "var(--green)" : r.quality_score >= 6 ? "var(--gold)" : "var(--red)";
+    var servingLine = esc(r.serving_note || "") + (r.serving_grams ? (r.serving_note ? " · " : "") + Math.round(r.serving_grams) + "g (" + (r.serving_grams/28.35).toFixed(1) + " oz)" : "");
     html += '<div style="margin-top:12px;background:var(--bg);border-radius:8px;padding:14px;border:1px solid var(--teal)">'
       + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">'
       + '<div><div style="font-weight:700;font-size:15px">' + esc(r.meal_name) + '</div>'
-      + '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + esc(r.serving_note || "") + '</div></div>'
-      + (r.quality_score!=null ? '<span style="font-size:11px;font-weight:700;color:' + qColor + ';background:' + qColor + '22;padding:2px 8px;border-radius:10px">' + r.quality_score + '/10</span>' : '')
+      + '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + servingLine + '</div></div>'
+      + (r.grading ? '<span style="font-size:10px;color:var(--muted);font-style:italic;flex-shrink:0">Grading…</span>' : (r.quality_score!=null ? '<span style="font-size:11px;font-weight:700;color:' + qColor + ';background:' + qColor + '22;padding:2px 8px;border-radius:10px">' + r.quality_score + '/10</span>' : ''))
       + '</div>'
       + '<div style="font-size:10px;color:var(--muted);margin-bottom:4px">Tap any number to correct it if the AI got something wrong</div>'
       + '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:10px">'
@@ -5533,7 +5568,10 @@ function renderNutrition() {
             + '<div style="text-align:center"><div style="font-size:13px;font-weight:700;color:#ef9a9a">' + m.fat_g + 'g</div><div style="font-size:9px;color:var(--muted)">Fat</div></div>'
             + '<div style="text-align:center"><div style="font-size:13px;font-weight:700;color:#a5d6a7">' + (m.fiber_g||0) + 'g</div><div style="font-size:9px;color:var(--muted)">Fiber</div></div>'
             + '</div>';
-          if(m.serving_note) html += '<div style="font-size:11px;color:var(--muted);margin-bottom:6px">' + esc(m.serving_note) + '</div>';
+          if(m.serving_note || m.serving_grams) {
+            var servingDetailLine = esc(m.serving_note||"") + (m.serving_grams ? (m.serving_note?" · ":"") + Math.round(m.serving_grams) + "g (" + (m.serving_grams/28.35).toFixed(1) + " oz)" : "");
+            html += '<div style="font-size:11px;color:var(--muted);margin-bottom:6px">' + servingDetailLine + '</div>';
+          }
           if(m.quality_notes) {
             html += '<div style="background:var(--teal3);border:1px solid var(--teal);border-radius:6px;padding:8px;margin-bottom:10px">'
               + '<div style="font-size:10px;color:var(--teal2);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px">Boost this score</div>'
