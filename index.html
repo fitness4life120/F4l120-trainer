@@ -1828,6 +1828,103 @@ function getWeeklyWeightRangesTrainer(progressLogs) {
   });
 }
 
+function getStepsAveragesTrainer(waterLogs, period) {
+  var groups = {};
+  waterLogs.forEach(function(w){
+    if(w.steps==null) return;
+    var d = new Date(w.date+"T12:00:00");
+    var key, label;
+    if(period==="weekly"){
+      var dow = d.getDay();
+      var diffToMon = dow===0?-6:1-dow;
+      var monday = new Date(d); monday.setDate(d.getDate()+diffToMon);
+      key = monday.toISOString().slice(0,10);
+      label = monday.toLocaleDateString("en-US",{month:"short",day:"numeric"});
+    } else if(period==="monthly"){
+      key = w.date.slice(0,7);
+      label = new Date(key+"-01T12:00:00").toLocaleDateString("en-US",{month:"short",year:"2-digit"});
+    } else {
+      key = w.date.slice(0,4);
+      label = key;
+    }
+    if(!groups[key]) groups[key] = {sum:0, count:0, label:label};
+    groups[key].sum += (+w.steps);
+    groups[key].count++;
+  });
+  return Object.keys(groups).sort().map(function(k){
+    return { key:k, label:groups[k].label, avg: Math.round(groups[k].sum/groups[k].count) };
+  });
+}
+
+function drawStepsChartTrainer(canvasId, data, color) {
+  var canvas = document.getElementById(canvasId);
+  if(!canvas || data.length < 1) return;
+  var ctx = canvas.getContext("2d");
+  var dpr = window.devicePixelRatio || 1;
+  var rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width*dpr;
+  canvas.height = 160*dpr;
+  ctx.scale(dpr,dpr);
+  var W = rect.width, H = 160;
+  var pad = {t:20, r:14, b:28, l:44};
+  var cW = W-pad.l-pad.r, cH = H-pad.t-pad.b;
+  var vals = data.map(function(d){ return d.avg; });
+  var minV = Math.min(0, Math.min.apply(null, vals));
+  var maxV = Math.max.apply(null, vals)*1.15 || 1000;
+  ctx.clearRect(0,0,W,H);
+  ctx.strokeStyle = "rgba(28,48,64,0.8)"; ctx.lineWidth = 1;
+  for(var i=0;i<=3;i++){
+    var y = pad.t+(cH/3)*i;
+    ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(W-pad.r,y); ctx.stroke();
+    var val = Math.round(maxV-((maxV-minV)/3)*i).toLocaleString();
+    ctx.fillStyle = "#9fc2d1"; ctx.font = "9px system-ui"; ctx.textAlign = "right";
+    ctx.fillText(val, pad.l-4, y+3);
+  }
+  if(data.length===1){
+    var x0 = pad.l+cW/2;
+    var y0 = pad.t+cH-((data[0].avg-minV)/(maxV-minV))*cH;
+    ctx.beginPath(); ctx.arc(x0,y0,4,0,Math.PI*2); ctx.fillStyle = color; ctx.fill();
+    ctx.fillStyle = color; ctx.font = "bold 11px system-ui"; ctx.textAlign = "center";
+    ctx.fillText(data[0].avg.toLocaleString(), x0, y0-10);
+  } else {
+    var grad = ctx.createLinearGradient(0, pad.t, 0, pad.t+cH);
+    grad.addColorStop(0, color+"4D");
+    grad.addColorStop(1, color+"00");
+    ctx.beginPath();
+    data.forEach(function(d,i){
+      var x = pad.l + (i/(data.length-1))*cW;
+      var y = pad.t + cH - ((d.avg-minV)/(maxV-minV))*cH;
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    });
+    ctx.lineTo(pad.l+cW, pad.t+cH); ctx.lineTo(pad.l, pad.t+cH); ctx.closePath();
+    ctx.fillStyle = grad; ctx.fill();
+    ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.lineJoin = "round";
+    data.forEach(function(d,i){
+      var x = pad.l + (i/(data.length-1))*cW;
+      var y = pad.t + cH - ((d.avg-minV)/(maxV-minV))*cH;
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+    data.forEach(function(d,i){
+      var x = pad.l + (i/(data.length-1))*cW;
+      var y = pad.t + cH - ((d.avg-minV)/(maxV-minV))*cH;
+      ctx.beginPath(); ctx.arc(x,y,3,0,Math.PI*2); ctx.fillStyle = color; ctx.fill();
+      if(i===data.length-1){
+        ctx.fillStyle = color; ctx.font = "bold 10px system-ui"; ctx.textAlign = "center";
+        ctx.fillText(d.avg.toLocaleString(), x, y-8);
+      }
+    });
+  }
+  ctx.fillStyle = "#9fc2d1"; ctx.font = "9px system-ui"; ctx.textAlign = "center";
+  ctx.fillText(data[0].label, pad.l, H-4);
+  if(data.length>1) ctx.fillText(data[data.length-1].label, W-pad.r, H-4);
+}
+
+function setStepsPeriodTrainer(p) {
+  state.stepsPeriod = p;
+  renderMain();
+}
+
 function drawRangeChart(canvasId, weeks, color) {
   var canvas = document.getElementById(canvasId);
   if(!canvas || weeks.length < 1) return;
@@ -2154,6 +2251,20 @@ function renderProgress() {
     html += '<canvas id="weeklyWeightChartTrainer" style="width:100%;height:160px;display:block"></canvas>';
     html += '</div>';
     setTimeout(function(){ drawRangeChart("weeklyWeightChartTrainer", weeklyRanges, "#22a8be"); }, 50);
+  }
+  var stepsData = getStepsAveragesTrainer(state.waterLogs, state.stepsPeriod);
+  if(stepsData.length >= 1) {
+    html += '<div class="card">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div class="clbl" style="margin-bottom:0">Steps</div>';
+    html += '<div style="display:flex;gap:4px;background:var(--bg);border-radius:16px;padding:3px">';
+    ["weekly","monthly","yearly"].forEach(function(p){
+      html += '<button onclick="setStepsPeriodTrainer(\''+p+'\')" style="padding:5px 10px;border-radius:13px;border:none;cursor:pointer;font-size:10px;font-weight:700;text-transform:capitalize;background:'+(state.stepsPeriod===p?"var(--teal)":"transparent")+';color:'+(state.stepsPeriod===p?"#fff":"var(--muted)")+'">'+p+'</button>';
+    });
+    html += '</div></div>';
+    html += '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">Average daily steps per ' + (state.stepsPeriod==="weekly"?"week":state.stepsPeriod==="monthly"?"month":"year") + '</div>';
+    html += '<canvas id="stepsChartTrainer" style="width:100%;height:160px;display:block"></canvas>';
+    html += '</div>';
+    setTimeout(function(){ drawStepsChartTrainer("stepsChartTrainer", stepsData, "#a86bcc"); }, 50);
   }
   html += '<div class="card"><div class="clbl">Weight History</div>';
   if(state.cProg.length === 0) {
@@ -4954,6 +5065,7 @@ state.nMealTime = "Breakfast";
 state.nPhotoBase64 = null;
 state.nPhotoMediaType = null;
 state.nMode = "text";
+state.stepsPeriod = "weekly";
 state.nSaveToLibrary = false;
 state.expandedMealId = null;
 state.addingToMealId = null;
