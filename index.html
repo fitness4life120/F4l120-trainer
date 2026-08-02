@@ -715,6 +715,23 @@ function onPlusClick() {
 }
 
 // ── RENDER MAIN ──
+function renderMainPreserveFocus() {
+  var active = document.activeElement;
+  var id = active && active.id;
+  var selStart = active && typeof active.selectionStart === "number" ? active.selectionStart : null;
+  var selEnd = active && typeof active.selectionEnd === "number" ? active.selectionEnd : null;
+  renderMain();
+  if(id) {
+    var el = document.getElementById(id);
+    if(el) {
+      el.focus();
+      if(selStart != null && el.setSelectionRange) {
+        try { el.setSelectionRange(selStart, selEnd); } catch(e){}
+      }
+    }
+  }
+}
+
 function renderMain() {
   var el = document.getElementById("mainScroll");
   if(state.view === "clients") el.innerHTML = renderClients();
@@ -912,7 +929,7 @@ function renderClients() {
     html += '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+quiet.map(function(c){ var d=getDaysSinceLastLog(c.id); return esc(c.name)+" ("+(d===null?"never logged":d+"d ago")+")"; }).join(", ")+'</div>';
     html += '</div>';
   }
-  html += '<div class="sw"><span class="si">🔍</span><input placeholder="Search clients…" value="'+esc(state.srch)+'" oninput="state.srch=this.value;renderMain()"/></div>';
+  html += '<div class="sw"><span class="si">🔍</span><input id="clientSearchInput" placeholder="Search clients…" value="'+esc(state.srch)+'" oninput="state.srch=this.value;renderMainPreserveFocus()"/></div>';
   html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
   html += '<div style="font-family:Barlow Condensed;font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase">'+fC.length+' client'+(fC.length!==1?"s":"")+'</div>';
   if(inactiveCount > 0) html += '<a href="javascript:void(0)" onclick="state.showInactiveClients=!state.showInactiveClients;renderMain()" style="font-size:11px;color:var(--teal2);text-decoration:underline">'+(state.showInactiveClients?"Hide":"Show")+' Inactive ('+inactiveCount+')</a>';
@@ -2576,7 +2593,7 @@ function renderLibrary() {
   var filtered = srch ? EXERCISES.filter(function(e){ return e.name.toLowerCase().includes(srch); }) : EXERCISES;
   
   var html = '<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">';
-  html += '<input id="libSearch" placeholder="Search 549 exercises…" value="'+esc(state.exerciseLibrarySearch||"")+'" oninput="state.exerciseLibrarySearch=this.value;renderMain()" style="background:var(--s1);border:1px solid var(--b1);border-radius:8px;padding:10px 12px;color:var(--txt);font-family:Barlow,sans-serif;font-size:13px;outline:none;flex:1"/>';
+  html += '<input id="libSearch" placeholder="Search 549 exercises…" value="'+esc(state.exerciseLibrarySearch||"")+'" oninput="state.exerciseLibrarySearch=this.value;renderMainPreserveFocus()" style="background:var(--s1);border:1px solid var(--b1);border-radius:8px;padding:10px 12px;color:var(--txt);font-family:Barlow,sans-serif;font-size:13px;outline:none;flex:1"/>';
   html += '<button class="bg_" style="width:auto;padding:10px 14px;margin:0;white-space:nowrap" onclick="' + (state.clientsSubView === "exerciseLibrary" ? "setClientsSubView(\'list\')" : "toggleLibrary()") + '">✕ Close</button>';
   html += '</div>';
   
