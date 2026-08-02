@@ -2572,11 +2572,11 @@ function promptExerciseVideo(name) {
 
 function renderLibrary() {
   var CATS = ["Chest","Back","Shoulders","Biceps","Triceps","Legs","Glutes","Core","Cardio","Full Body"];
-  var srch = (document.getElementById("libSearch") ? document.getElementById("libSearch").value : "").toLowerCase();
+  var srch = (state.exerciseLibrarySearch || "").toLowerCase();
   var filtered = srch ? EXERCISES.filter(function(e){ return e.name.toLowerCase().includes(srch); }) : EXERCISES;
   
   var html = '<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">';
-  html += '<input id="libSearch" placeholder="Search 549 exercises…" oninput="renderMain()" style="background:var(--s1);border:1px solid var(--b1);border-radius:8px;padding:10px 12px;color:var(--txt);font-family:Barlow,sans-serif;font-size:13px;outline:none;flex:1"/>';
+  html += '<input id="libSearch" placeholder="Search 549 exercises…" value="'+esc(state.exerciseLibrarySearch||"")+'" oninput="state.exerciseLibrarySearch=this.value;renderMain()" style="background:var(--s1);border:1px solid var(--b1);border-radius:8px;padding:10px 12px;color:var(--txt);font-family:Barlow,sans-serif;font-size:13px;outline:none;flex:1"/>';
   html += '<button class="bg_" style="width:auto;padding:10px 14px;margin:0;white-space:nowrap" onclick="' + (state.clientsSubView === "exerciseLibrary" ? "setClientsSubView(\'list\')" : "toggleLibrary()") + '">✕ Close</button>';
   html += '</div>';
   
