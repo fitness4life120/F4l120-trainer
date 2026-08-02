@@ -534,6 +534,15 @@ body{font-family:'Barlow',sans-serif;color:var(--txt)}
   </div>
 </div>
 
+<div class="overlay" id="videoSuggestSheet">
+  <div class="sheet">
+    <div class="hdl"></div>
+    <div class="stitle" id="videoSuggestTitle">Suggested Videos</div>
+    <div id="videoSuggestResults" style="max-height:400px;overflow-y:auto"></div>
+    <button class="bg_" onclick="closeSheet('videoSuggestSheet')">Cancel</button>
+  </div>
+</div>
+
 <div class="overlay" id="logExSheet">
   <div class="sheet">
     <div class="hdl"></div>
@@ -724,12 +733,23 @@ function renderMainPreserveFocus() {
   if(id) {
     var el = document.getElementById(id);
     if(el) {
-      el.focus();
-      if(selStart != null && el.setSelectionRange) {
-        try { el.setSelectionRange(selStart, selEnd); } catch(e){}
-      }
+      setTimeout(function(){
+        el.focus();
+        if(selStart != null && el.setSelectionRange) {
+          try { el.setSelectionRange(selStart, selEnd); } catch(e){}
+        }
+      }, 0);
     }
   }
+}
+
+var _debounceTimers = {};
+function debouncedRenderPreserveFocus(key, delay) {
+  if(_debounceTimers[key]) clearTimeout(_debounceTimers[key]);
+  _debounceTimers[key] = setTimeout(function(){
+    renderMainPreserveFocus();
+    _debounceTimers[key] = null;
+  }, delay || 350);
 }
 
 function renderMain() {
@@ -929,7 +949,7 @@ function renderClients() {
     html += '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+quiet.map(function(c){ var d=getDaysSinceLastLog(c.id); return esc(c.name)+" ("+(d===null?"never logged":d+"d ago")+")"; }).join(", ")+'</div>';
     html += '</div>';
   }
-  html += '<div class="sw"><span class="si">🔍</span><input id="clientSearchInput" placeholder="Search clients…" value="'+esc(state.srch)+'" oninput="state.srch=this.value;renderMainPreserveFocus()"/></div>';
+  html += '<div class="sw"><span class="si">🔍</span><input id="clientSearchInput" placeholder="Search clients…" value="'+esc(state.srch)+'" oninput="state.srch=this.value;debouncedRenderPreserveFocus(\'clientSearch\')"/></div>';
   html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
   html += '<div style="font-family:Barlow Condensed;font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase">'+fC.length+' client'+(fC.length!==1?"s":"")+'</div>';
   if(inactiveCount > 0) html += '<a href="javascript:void(0)" onclick="state.showInactiveClients=!state.showInactiveClients;renderMain()" style="font-size:11px;color:var(--teal2);text-decoration:underline">'+(state.showInactiveClients?"Hide":"Show")+' Inactive ('+inactiveCount+')</a>';
@@ -2574,6 +2594,45 @@ function deleteCustomExercise(name) {
     }).catch(function(){ showToast("Could not remove exercise"); });
 }
 
+var YOUTUBE_SEARCH_URL = "https://superb-eclair-9ca7e8.netlify.app/.netlify/functions/youtube-search";
+
+async function suggestVideoFor(name) {
+  document.getElementById("videoSuggestTitle").textContent = 'Suggested Videos: "' + name + '"';
+  document.getElementById("videoSuggestResults").innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px;font-size:13px">Searching YouTube…</div>';
+  openSheet("videoSuggestSheet");
+  try {
+    var res = await fetch(YOUTUBE_SEARCH_URL + "?q=" + encodeURIComponent(name));
+    var data = await res.json();
+    if(!res.ok) {
+      document.getElementById("videoSuggestResults").innerHTML = '<div style="text-align:center;color:var(--red);padding:20px;font-size:13px">' + esc(data.error || "Search failed") + '</div>';
+      return;
+    }
+    if(!data.results || !data.results.length) {
+      document.getElementById("videoSuggestResults").innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px;font-size:13px">No results found</div>';
+      return;
+    }
+    var html = "";
+    data.results.forEach(function(r){
+      html += '<div onclick="selectSuggestedVideo(\''+name.replace(/'/g,"\\'")+'\',\''+r.url+'\')" style="display:flex;gap:10px;padding:10px;border:1px solid var(--b1);border-radius:8px;margin-bottom:8px;cursor:pointer;background:var(--s1)">';
+      if(r.thumbnail) html += '<img src="'+r.thumbnail+'" style="width:80px;height:60px;object-fit:cover;border-radius:6px;flex-shrink:0"/>';
+      html += '<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:var(--txt);line-height:1.3">'+esc(r.title)+'</div>';
+      html += '<div style="font-size:10px;color:var(--muted);margin-top:3px">'+esc(r.channelTitle)+'</div></div>';
+      html += '</div>';
+    });
+    document.getElementById("videoSuggestResults").innerHTML = html;
+  } catch(e) {
+    document.getElementById("videoSuggestResults").innerHTML = '<div style="text-align:center;color:var(--red);padding:20px;font-size:13px">Could not search YouTube</div>';
+  }
+}
+
+function selectSuggestedVideo(name, url) {
+  saveExerciseVideo(name, url).then(function(){
+    closeSheet("videoSuggestSheet");
+    showToast("Video link saved");
+    renderMain();
+  }).catch(function(){ showToast("Could not save link"); });
+}
+
 function promptExerciseVideo(name) {
   var current = state.exerciseVideos[name] || "";
   var url = window.prompt('YouTube demo link for "' + name + '":', current);
@@ -2593,7 +2652,7 @@ function renderLibrary() {
   var filtered = srch ? EXERCISES.filter(function(e){ return e.name.toLowerCase().includes(srch); }) : EXERCISES;
   
   var html = '<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">';
-  html += '<input id="libSearch" placeholder="Search 549 exercises…" value="'+esc(state.exerciseLibrarySearch||"")+'" oninput="state.exerciseLibrarySearch=this.value;renderMainPreserveFocus()" style="background:var(--s1);border:1px solid var(--b1);border-radius:8px;padding:10px 12px;color:var(--txt);font-family:Barlow,sans-serif;font-size:13px;outline:none;flex:1"/>';
+  html += '<input id="libSearch" placeholder="Search 549 exercises…" value="'+esc(state.exerciseLibrarySearch||"")+'" oninput="state.exerciseLibrarySearch=this.value;debouncedRenderPreserveFocus(\'libSearch\')" style="background:var(--s1);border:1px solid var(--b1);border-radius:8px;padding:10px 12px;color:var(--txt);font-family:Barlow,sans-serif;font-size:13px;outline:none;flex:1"/>';
   html += '<button class="bg_" style="width:auto;padding:10px 14px;margin:0;white-space:nowrap" onclick="' + (state.clientsSubView === "exerciseLibrary" ? "setClientsSubView(\'list\')" : "toggleLibrary()") + '">✕ Close</button>';
   html += '</div>';
   
@@ -2605,6 +2664,7 @@ function renderLibrary() {
       html += '<span style="font-size:13px;font-weight:500">'+e.name+(e.is_custom?' <span style="font-size:9px;color:var(--gold);background:var(--gold2);border-radius:3px;padding:1px 5px;margin-left:4px">CUSTOM</span>':'')+'</span>';
       html += '<div style="display:flex;align-items:center;gap:6px;flex-shrink:0">';
       html += '<span style="font-size:10px;color:var(--muted);background:var(--soft);border-radius:3px;padding:1px 6px">'+e.category+'</span>';
+      html += '<button onclick="suggestVideoFor(\''+e.name.replace(/'/g,"\\'")+'\')" title="Suggest videos from YouTube" style="background:transparent;border:1px solid var(--b1);color:var(--muted);border-radius:6px;padding:4px 7px;font-size:12px;cursor:pointer;line-height:1">🔍</button>';
       html += '<button onclick="promptExerciseVideo(\''+e.name.replace(/'/g,"\\'")+'\')" title="'+(hasVid?"Edit video link":"Add video link")+'" style="background:'+(hasVid?"rgba(45,186,128,0.12)":"transparent")+';border:1px solid '+(hasVid?"rgba(45,186,128,0.3)":"var(--b1)")+';color:'+(hasVid?"var(--green)":"var(--muted)")+';border-radius:6px;padding:4px 7px;font-size:12px;cursor:pointer;line-height:1">🎥</button>';
       if(e.is_custom) {
         html += '<button onclick="editCustomExercise(\''+e.name.replace(/'/g,"\\'")+'\')" title="Edit exercise" style="background:transparent;border:1px solid var(--b1);color:var(--muted);border-radius:6px;padding:4px 7px;font-size:12px;cursor:pointer;line-height:1">✏️</button>';
@@ -2625,6 +2685,7 @@ function renderLibrary() {
         html += '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:6px;padding:9px 12px;margin-bottom:4px;font-size:13px;display:flex;justify-content:space-between;align-items:center;gap:8px">';
         html += '<span>'+e.name+(e.is_custom?' <span style="font-size:9px;color:var(--gold);background:var(--gold2);border-radius:3px;padding:1px 5px;margin-left:4px">CUSTOM</span>':'')+'</span>';
         html += '<div style="display:flex;align-items:center;gap:6px;flex-shrink:0">';
+        html += '<button onclick="suggestVideoFor(\''+e.name.replace(/'/g,"\\'")+'\')" title="Suggest videos from YouTube" style="background:transparent;border:1px solid var(--b1);color:var(--muted);border-radius:6px;padding:4px 7px;font-size:12px;cursor:pointer;line-height:1">🔍</button>';
         html += '<button onclick="promptExerciseVideo(\''+e.name.replace(/'/g,"\\'")+'\')" title="'+(hasVid?"Edit video link":"Add video link")+'" style="background:'+(hasVid?"rgba(45,186,128,0.12)":"transparent")+';border:1px solid '+(hasVid?"rgba(45,186,128,0.3)":"var(--b1)")+';color:'+(hasVid?"var(--green)":"var(--muted)")+';border-radius:6px;padding:4px 7px;font-size:12px;cursor:pointer;line-height:1">🎥</button>';
         if(e.is_custom) {
           html += '<button onclick="editCustomExercise(\''+e.name.replace(/'/g,"\\'")+'\')" title="Edit exercise" style="background:transparent;border:1px solid var(--b1);color:var(--muted);border-radius:6px;padding:4px 7px;font-size:12px;cursor:pointer;line-height:1">✏️</button>';
