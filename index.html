@@ -2129,7 +2129,8 @@ function generateProgressReport() {
   var exMap = {};
   state.cLogs.forEach(function(l){
     if(!l.exercise || !l.weight || +l.weight<=0) return;
-    if(!exMap[l.exercise] || +l.weight > exMap[l.exercise]) exMap[l.exercise] = +l.weight;
+    var inverted = INVERTED_PR_EXERCISES.has(l.exercise);
+    if(!exMap[l.exercise] || (inverted ? +l.weight<exMap[l.exercise] : +l.weight>exMap[l.exercise])) exMap[l.exercise] = +l.weight;
   });
   var topPRs = Object.keys(exMap).map(function(k){ return {ex:k, w:exMap[k]}; }).sort(function(a,b){ return b.w-a.w; }).slice(0,5);
   if(topPRs.length) {
@@ -2214,8 +2215,9 @@ function renderProgress() {
   state.cLogs.slice().reverse().forEach(function(l){
     if(!l.exercise || !l.weight || +l.weight===0) return;
     if(!exMap[l.exercise]) exMap[l.exercise] = [];
+    var inverted = INVERTED_PR_EXERCISES.has(l.exercise);
     var existing = exMap[l.exercise].filter(function(e){ return e.d===l.date; })[0];
-    if(!existing || +l.weight > existing.v) {
+    if(!existing || (inverted ? +l.weight < existing.v : +l.weight > existing.v)) {
       exMap[l.exercise] = exMap[l.exercise].filter(function(e){ return e.d!==l.date; });
       exMap[l.exercise].push({d:l.date, v:+l.weight});
     }
@@ -2225,7 +2227,8 @@ function renderProgress() {
     var activeEx = (state.selectedProgressExercise && exMap[state.selectedProgressExercise]) ? state.selectedProgressExercise : exList[0];
     var chartData = exMap[activeEx];
     var firstPt = chartData[0], lastPt = chartData[chartData.length-1];
-    var gain = (lastPt.v - firstPt.v).toFixed(1);
+    var activeInverted = INVERTED_PR_EXERCISES.has(activeEx);
+    var gain = (activeInverted ? (firstPt.v - lastPt.v) : (lastPt.v - firstPt.v)).toFixed(1);
     html += '<div class="card"><div class="clbl">Strength Progress</div>';
     html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">';
     exList.forEach(function(ex){
@@ -2398,7 +2401,11 @@ function renderStats() {
   var allVol = state.cLogs.reduce(function(s,e){return s+((+e.sets||0)*(+e.reps||0)*(+e.weight||0));},0);
   var grp = {}; state.cLogs.forEach(function(e){if(!grp[e.date])grp[e.date]=[];grp[e.date].push(e);});
   var mCnt = {}; state.cLogs.forEach(function(e){mCnt[e.muscle]=(mCnt[e.muscle]||0)+1;});
-  var bests = {}; state.cLogs.forEach(function(e){if(e.weight&&(!bests[e.exercise]||+e.weight>+bests[e.exercise]))bests[e.exercise]=e.weight;});
+  var bests = {}; state.cLogs.forEach(function(e){
+    if(!e.weight) return;
+    var inverted = INVERTED_PR_EXERCISES.has(e.exercise);
+    if(!bests[e.exercise] || (inverted ? +e.weight<+bests[e.exercise] : +e.weight>+bests[e.exercise])) bests[e.exercise]=e.weight;
+  });
   var html = clientBanner();
   html += '<div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:8px">';
   html += '<button class="chip" style="cursor:pointer;color:var(--teal2);background:var(--teal3)" onclick="openSheet(\'editClientSheet\')">✏️ Edit</button>';
@@ -2517,13 +2524,16 @@ async function loadExerciseVideos() {
   } catch(e) { /* non-fatal — library just won't show video status */ }
 }
 
+var INVERTED_PR_EXERCISES = new Set(["Assisted Dips", "Assisted Pull Ups"]);
+
 function getExercisePR(logs, exerciseName) {
   var best = null;
+  var inverted = INVERTED_PR_EXERCISES.has(exerciseName);
   (logs||[]).forEach(function(l){
     if(l.exercise !== exerciseName) return;
     var w = +l.weight || 0;
     if(w <= 0) return;
-    if(!best || w > best.weight) best = { weight: w, reps: l.reps, log_type: l.log_type };
+    if(!best || (inverted ? w < best.weight : w > best.weight)) best = { weight: w, reps: l.reps, log_type: l.log_type };
   });
   return best;
 }
