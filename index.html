@@ -2129,7 +2129,7 @@ function generateProgressReport() {
   var exMap = {};
   state.cLogs.forEach(function(l){
     if(!l.exercise || !l.weight || +l.weight<=0) return;
-    var inverted = INVERTED_PR_EXERCISES.has(l.exercise);
+    var inverted = isInvertedPRExercise(l.exercise);
     if(!exMap[l.exercise] || (inverted ? +l.weight<exMap[l.exercise] : +l.weight>exMap[l.exercise])) exMap[l.exercise] = +l.weight;
   });
   var topPRs = Object.keys(exMap).map(function(k){ return {ex:k, w:exMap[k]}; }).sort(function(a,b){ return b.w-a.w; }).slice(0,5);
@@ -2215,7 +2215,7 @@ function renderProgress() {
   state.cLogs.slice().reverse().forEach(function(l){
     if(!l.exercise || !l.weight || +l.weight===0) return;
     if(!exMap[l.exercise]) exMap[l.exercise] = [];
-    var inverted = INVERTED_PR_EXERCISES.has(l.exercise);
+    var inverted = isInvertedPRExercise(l.exercise);
     var existing = exMap[l.exercise].filter(function(e){ return e.d===l.date; })[0];
     if(!existing || (inverted ? +l.weight < existing.v : +l.weight > existing.v)) {
       exMap[l.exercise] = exMap[l.exercise].filter(function(e){ return e.d!==l.date; });
@@ -2227,7 +2227,7 @@ function renderProgress() {
     var activeEx = (state.selectedProgressExercise && exMap[state.selectedProgressExercise]) ? state.selectedProgressExercise : exList[0];
     var chartData = exMap[activeEx];
     var firstPt = chartData[0], lastPt = chartData[chartData.length-1];
-    var activeInverted = INVERTED_PR_EXERCISES.has(activeEx);
+    var activeInverted = isInvertedPRExercise(activeEx);
     var gain = (activeInverted ? (firstPt.v - lastPt.v) : (lastPt.v - firstPt.v)).toFixed(1);
     html += '<div class="card"><div class="clbl">Strength Progress</div>';
     html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">';
@@ -2403,7 +2403,7 @@ function renderStats() {
   var mCnt = {}; state.cLogs.forEach(function(e){mCnt[e.muscle]=(mCnt[e.muscle]||0)+1;});
   var bests = {}; state.cLogs.forEach(function(e){
     if(!e.weight) return;
-    var inverted = INVERTED_PR_EXERCISES.has(e.exercise);
+    var inverted = isInvertedPRExercise(e.exercise);
     if(!bests[e.exercise] || (inverted ? +e.weight<+bests[e.exercise] : +e.weight>+bests[e.exercise])) bests[e.exercise]=e.weight;
   });
   var html = clientBanner();
@@ -2524,11 +2524,14 @@ async function loadExerciseVideos() {
   } catch(e) { /* non-fatal — library just won't show video status */ }
 }
 
-var INVERTED_PR_EXERCISES = new Set(["Assisted Dips", "Assisted Pull Ups"]);
+var INVERTED_PR_EXERCISES = new Set(["assisted dips", "assisted pull ups"]);
+function isInvertedPRExercise(name) {
+  return INVERTED_PR_EXERCISES.has((name||"").trim().toLowerCase().replace(/[-_]/g," ").replace(/\s+/g," "));
+}
 
 function getExercisePR(logs, exerciseName) {
   var best = null;
-  var inverted = INVERTED_PR_EXERCISES.has(exerciseName);
+  var inverted = isInvertedPRExercise(exerciseName);
   (logs||[]).forEach(function(l){
     if(l.exercise !== exerciseName) return;
     var w = +l.weight || 0;
