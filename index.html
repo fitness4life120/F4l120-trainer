@@ -2524,16 +2524,20 @@ async function loadExerciseVideos() {
   } catch(e) { /* non-fatal — library just won't show video status */ }
 }
 
+function normalizeExName(name) {
+  return (name||"").trim().toLowerCase().replace(/[-_]/g," ").replace(/\s+/g," ");
+}
 var INVERTED_PR_EXERCISES = new Set(["assisted dips", "assisted pull ups"]);
 function isInvertedPRExercise(name) {
-  return INVERTED_PR_EXERCISES.has((name||"").trim().toLowerCase().replace(/[-_]/g," ").replace(/\s+/g," "));
+  return INVERTED_PR_EXERCISES.has(normalizeExName(name));
 }
 
 function getExercisePR(logs, exerciseName) {
   var best = null;
   var inverted = isInvertedPRExercise(exerciseName);
+  var targetNorm = normalizeExName(exerciseName);
   (logs||[]).forEach(function(l){
-    if(l.exercise !== exerciseName) return;
+    if(normalizeExName(l.exercise) !== targetNorm) return;
     var w = +l.weight || 0;
     if(w <= 0) return;
     if(!best || (inverted ? w < best.weight : w > best.weight)) best = { weight: w, reps: l.reps, log_type: l.log_type };
