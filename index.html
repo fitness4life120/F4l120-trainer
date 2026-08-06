@@ -2436,8 +2436,11 @@ function renderStats() {
   });
   if(!mcEntries.length) html += '<div style="color:var(--muted);font-size:12px;font-style:italic">No data yet</div>';
   html += '</div>';
-  var prEntries = Object.entries(bests).sort(function(a,b){return b[1]-a[1];}).slice(0,8);
+  var prQuery = (state.prSearch||"").trim().toLowerCase();
+  var prEntries = Object.entries(bests).sort(function(a,b){return b[1]-a[1];});
+  prEntries = prQuery ? prEntries.filter(function(entry){ return entry[0].toLowerCase().includes(prQuery); }) : prEntries.slice(0,8);
   html += '<div class="card"><div class="clbl">Personal Records</div>';
+  html += '<input id="prSearchInput" placeholder="🔍 Search exercises…" value="'+esc(state.prSearch||"")+'" oninput="state.prSearch=this.value;debouncedRenderPreserveFocus(\'prSearch\')" style="background:var(--bg);border:1.5px solid var(--b1);border-radius:8px;padding:10px;color:var(--txt);font-family:Barlow,sans-serif;font-size:13px;outline:none;width:100%;margin-bottom:10px"/>';
   if(prEntries.length) {
     prEntries.forEach(function(entry){
       html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--b1)">'
@@ -2446,7 +2449,7 @@ function renderStats() {
         +'</div>';
     });
   } else {
-    html += '<div style="color:var(--muted);font-size:12px;font-style:italic">No PRs yet</div>';
+    html += '<div style="color:var(--muted);font-size:12px;font-style:italic">'+(prQuery?"No matching exercises":"No PRs yet")+'</div>';
   }
   html += '</div>';
   html += '<button class="bd_" onclick="deleteActiveClient()">🗑 Remove Client</button>';
@@ -2810,6 +2813,7 @@ async function selectClient(id) {
   state.activeId = id;
   state.view = "log";
   state.selectedProgressExercise = null;
+  state.prSearch = "";
   closeSheet("pickerSheet");
   renderNav();
   document.getElementById("mainScroll").innerHTML = '<div class="empty">Loading…</div>';
@@ -5161,6 +5165,7 @@ state.nPhotoBase64 = null;
 state.nPhotoMediaType = null;
 state.nMode = "text";
 state.stepsPeriod = "weekly";
+state.prSearch = "";
 state.nSaveToLibrary = false;
 state.expandedMealId = null;
 state.addingToMealId = null;
