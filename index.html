@@ -2113,7 +2113,7 @@ function generateProgressReport() {
   var latestP = state.cProg && state.cProg[0];
   if(latestP) {
     bodyLine("Weight: " + latestP.weight + " lbs" + (latestP.body_fat?"   ·   Body Fat: "+latestP.body_fat+"%":"") + "   ·   Last check-in: " + latestP.date);
-    var measureParts = [latestP.waist&&('Waist '+latestP.waist+'"'), latestP.chest&&('Chest '+latestP.chest+'"'), latestP.arms&&('Arms '+latestP.arms+'"'), latestP.hips&&('Hips '+latestP.hips+'"'), latestP.thighs&&('Thighs '+latestP.thighs+'"'), latestP.visceral_fat&&('Visceral Fat '+latestP.visceral_fat), latestP.muscle_mass&&('Muscle Mass '+latestP.muscle_mass+' lbs'), latestP.hang_time_seconds&&('Hang Time '+latestP.hang_time_seconds+'s'), latestP.vo2_max&&('VO2 Max '+latestP.vo2_max)].filter(Boolean);
+    var measureParts = [latestP.waist&&('Waist '+latestP.waist+'"'), latestP.chest&&('Chest '+latestP.chest+'"'), latestP.arms&&('Arms '+latestP.arms+'"'), latestP.hips&&('Hips '+latestP.hips+'"'), latestP.thighs&&('Thighs '+latestP.thighs+'"'), latestP.visceral_fat&&('Visceral Fat '+latestP.visceral_fat), latestP.muscle_mass&&('Muscle Mass '+latestP.muscle_mass+' lbs'), latestP.hang_time_seconds&&('Hang Time '+latestP.hang_time_seconds+'s'), latestP.vo2_max&&('VO2 Max '+latestP.vo2_max), latestP.hrv&&('HRV '+latestP.hrv+'ms'), latestP.resting_heart_rate&&('Resting HR '+latestP.resting_heart_rate+'bpm')].filter(Boolean);
     if(measureParts.length) bodyLine(measureParts.join("   ·   "), {color:MUTED, size:9.5});
   } else {
     bodyLine("No check-ins logged yet.", {color:MUTED});
@@ -2318,7 +2318,8 @@ function renderProgress() {
       var measureLine = [
         p.waist?'Waist '+p.waist+'"':null, p.chest?'Chest '+p.chest+'"':null, p.arms?'Arms '+p.arms+'"':null, p.hips?'Hips '+p.hips+'"':null, p.thighs?'Thighs '+p.thighs+'"':null,
         p.visceral_fat?'Visceral Fat '+p.visceral_fat:null, p.muscle_mass?'Muscle Mass '+p.muscle_mass+' lbs':null,
-        p.hang_time_seconds?'Hang Time '+p.hang_time_seconds+'s':null, p.vo2_max?'VO2 Max '+p.vo2_max:null
+        p.hang_time_seconds?'Hang Time '+p.hang_time_seconds+'s':null, p.vo2_max?'VO2 Max '+p.vo2_max:null,
+        p.hrv?'HRV '+p.hrv+'ms':null, p.resting_heart_rate?'Resting HR '+p.resting_heart_rate+'bpm':null
       ].filter(Boolean).join(" · ");
       html += '<div class="prow">'
         +'<div style="font-family:Barlow Condensed;font-size:11px;color:var(--gold);font-weight:700;width:80px;flex-shrink:0">'+p.date+'</div>'
