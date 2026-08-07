@@ -5168,6 +5168,8 @@ state.nPhotoMediaType = null;
 state.nMode = "text";
 state.stepsPeriod = "weekly";
 state.prSearch = "";
+state.dayAnalysis = null;
+state.analyzingDay = false;
 state.nSaveToLibrary = false;
 state.expandedMealId = null;
 state.addingToMealId = null;
@@ -5207,6 +5209,49 @@ async function gradeKnownMealTrainer(name, cal, pro, carb, fat, fiber) {
   var data = await res.json();
   var raw = (data.content && data.content[0] && data.content[0].text) || "{}";
   return JSON.parse(raw.replace(/```json|```/g, "").trim());
+}
+
+var DAY_ANALYSIS_PROMPT = function (mealsSummary, totals) {
+  return "You are a precise sports nutrition expert. Analyze this person's FULL DAY of eating as a whole — not meal by meal — for a fitness/body recomp goal. Return ONLY a JSON object with no markdown, no preamble:\n\n"
+    + "Meals logged today:\n" + mealsSummary + "\n\nDaily totals: " + totals.calories + " cal, " + totals.protein_g + "g protein, " + totals.carbs_g + "g carbs, " + totals.fat_g + "g fat, " + totals.fiber_g + "g fiber\n\n"
+    + "Return this exact shape:\n"
+    + '{"day_score":1-10,"day_notes":"2-3 sentences of specific, actionable feedback on the WHOLE DAY as a pattern — protein distribution across meals, macro balance, what worked well, and 1-2 concrete things to adjust tomorrow. Name actual foods where relevant, not generic advice."}';
+};
+
+async function analyzeDayTrainer(mealsSummary, totals) {
+  var res = await fetch(NUTRITION_PROXY_URL, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 500,
+      messages: [{ role: "user", content: DAY_ANALYSIS_PROMPT(mealsSummary, totals) }] })
+  });
+  var data = await res.json();
+  var raw = (data.content && data.content[0] && data.content[0].text) || "{}";
+  return JSON.parse(raw.replace(/```json|```/g, "").trim());
+}
+
+async function runDayAnalysisTrainer() {
+  var a = getActive();
+  if (!a) return;
+  var dayLogs = state.nLogs.filter(function(l){ return l.date === state.nDate; });
+  if (!dayLogs.length) { showToast("Log at least one meal for this day first"); return; }
+  state.analyzingDay = true;
+  state.dayAnalysis = null;
+  renderMain();
+  try {
+    var totals = dayLogs.reduce(function(acc, m) {
+      acc.calories += (+m.calories || 0); acc.protein_g += (+m.protein_g || 0);
+      acc.carbs_g += (+m.carbs_g || 0); acc.fat_g += (+m.fat_g || 0); acc.fiber_g += (+m.fiber_g || 0);
+      return acc;
+    }, { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0 });
+    var mealsSummary = dayLogs.map(function(m){
+      return "- " + m.meal_name + " (" + (m.meal_time||"unspecified time") + "): " + m.calories + " cal, " + m.protein_g + "g protein, " + m.carbs_g + "g carbs, " + m.fat_g + "g fat";
+    }).join("\n");
+    state.dayAnalysis = await analyzeDayTrainer(mealsSummary, totals);
+  } catch(e) {
+    showToast("Could not analyze the day");
+  }
+  state.analyzingDay = false;
+  renderMain();
 }
 
 async function analyzeMealText(description) {
@@ -5419,6 +5464,7 @@ function shiftNutritionDay(n) {
   var d = new Date(state.nDate);
   d.setDate(d.getDate() + n);
   state.nDate = fmtDateISO(d);
+  state.dayAnalysis = null;
   renderMain();
 }
 
@@ -5654,6 +5700,19 @@ function renderNutrition() {
     + macroBox("Fat", totals.fat_g, fatGoal, "#ef9a9a")
     + macroBox("Fiber", totals.fiber_g, null, "#a5d6a7")
     + '</div></div>';
+  html += '<div class="card">'
+    + '<button class="bp" ' + (state.analyzingDay ? "disabled" : "") + ' onclick="runDayAnalysisTrainer()">' + (state.analyzingDay ? "Analyzing this day…" : "📊 Analyze This Day") + '</button>';
+  if (state.dayAnalysis) {
+    var dColor = state.dayAnalysis.day_score >= 8 ? "var(--green)" : state.dayAnalysis.day_score >= 6 ? "var(--gold)" : "var(--red)";
+    html += '<div style="margin-top:12px;background:var(--bg);border-radius:8px;padding:14px;border:1px solid var(--teal)">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+      + '<div style="font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:0.5px">Day Score</div>'
+      + '<span style="font-size:13px;font-weight:700;color:' + dColor + ';background:' + dColor + '22;padding:2px 10px;border-radius:10px">' + state.dayAnalysis.day_score + '/10</span>'
+      + '</div>'
+      + '<div style="font-size:13px;color:var(--txt);line-height:1.5">' + esc(state.dayAnalysis.day_notes) + '</div>'
+      + '</div>';
+  }
+  html += '</div>';
   var waterEntry = state.waterLogs.filter(function(w){ return w.date === state.nDate; })[0];
   var waterGlasses = waterEntry ? waterEntry.glasses : 0;
   html += '<div class="card">'
