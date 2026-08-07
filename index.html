@@ -5211,18 +5211,19 @@ async function gradeKnownMealTrainer(name, cal, pro, carb, fat, fiber) {
   return JSON.parse(raw.replace(/```json|```/g, "").trim());
 }
 
-var DAY_ANALYSIS_PROMPT = function (mealsSummary, totals) {
-  return "You are a precise sports nutrition expert. Analyze this person's FULL DAY of eating as a whole — not meal by meal — for a fitness/body recomp goal. Return ONLY a JSON object with no markdown, no preamble:\n\n"
-    + "Meals logged today:\n" + mealsSummary + "\n\nDaily totals: " + totals.calories + " cal, " + totals.protein_g + "g protein, " + totals.carbs_g + "g carbs, " + totals.fat_g + "g fat, " + totals.fiber_g + "g fiber\n\n"
+var DAY_ANALYSIS_PROMPT = function (mealsSummary, totals, goals) {
+  return "You are a precise sports nutrition expert. Analyze this person's FULL DAY of eating as a whole — not meal by meal — measured specifically against their personal daily targets. Return ONLY a JSON object with no markdown, no preamble:\n\n"
+    + "Meals logged today:\n" + mealsSummary + "\n\nActual totals: " + totals.calories + " cal, " + totals.protein_g + "g protein, " + totals.carbs_g + "g carbs, " + totals.fat_g + "g fat, " + totals.fiber_g + "g fiber\n\n"
+    + "Their daily targets: " + goals.calories + " cal, " + goals.protein + "g protein, " + goals.carbs + "g carbs, " + goals.fat + "g fat\n\n"
     + "Return this exact shape:\n"
-    + '{"day_score":1-10,"day_notes":"2-3 sentences of specific, actionable feedback on the WHOLE DAY as a pattern — protein distribution across meals, macro balance, what worked well, and 1-2 concrete things to adjust tomorrow. Name actual foods where relevant, not generic advice."}';
+    + '{"day_score":1-10,"day_notes":"2-3 sentences comparing actual intake against their specific targets — call out which targets were hit, missed, or exceeded and by roughly how much, plus protein distribution across meals and 1-2 concrete things to adjust tomorrow. Name actual foods where relevant, not generic advice."}';
 };
 
-async function analyzeDayTrainer(mealsSummary, totals) {
+async function analyzeDayTrainer(mealsSummary, totals, goals) {
   var res = await fetch(NUTRITION_PROXY_URL, {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 500,
-      messages: [{ role: "user", content: DAY_ANALYSIS_PROMPT(mealsSummary, totals) }] })
+      messages: [{ role: "user", content: DAY_ANALYSIS_PROMPT(mealsSummary, totals, goals) }] })
   });
   var data = await res.json();
   var raw = (data.content && data.content[0] && data.content[0].text) || "{}";
@@ -5246,7 +5247,8 @@ async function runDayAnalysisTrainer() {
     var mealsSummary = dayLogs.map(function(m){
       return "- " + m.meal_name + " (" + (m.meal_time||"unspecified time") + "): " + m.calories + " cal, " + m.protein_g + "g protein, " + m.carbs_g + "g carbs, " + m.fat_g + "g fat";
     }).join("\n");
-    state.dayAnalysis = await analyzeDayTrainer(mealsSummary, totals);
+    var goals = { calories: a.calories || 2000, protein: a.protein || 150, carbs: a.carbs || 200, fat: a.fat || 60 };
+    state.dayAnalysis = await analyzeDayTrainer(mealsSummary, totals, goals);
   } catch(e) {
     showToast("Could not analyze the day");
   }
