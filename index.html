@@ -755,7 +755,7 @@ function debouncedRenderPreserveFocus(key, delay) {
 function renderMain() {
   var el = document.getElementById("mainScroll");
   if(state.view === "clients") el.innerHTML = renderClients();
-  else if(state.view === "log") { el.innerHTML = renderLog(); if(getActive() && !libView) { setRowCounts.q = 3; quickLogType = "reps"; quickLogEachSide = false; renderSetRows("q","qSetRowsList",[{reps:"",weight:""},{reps:"",weight:""},{reps:"",weight:""}]); renderQuickTypeToggle(); } }
+  else if(state.view === "log") { el.innerHTML = renderLog(); if(getActive() && !libView) { setRowCounts.q = 3; quickLogType = "reps"; quickLogEachSide = false; quickLogUnit = "mi"; renderSetRows("q","qSetRowsList",[{reps:"",weight:""},{reps:"",weight:""},{reps:"",weight:""}]); renderQuickTypeToggle(); } }
   else if(state.view === "nutrition") el.innerHTML = renderNutrition();
   else if(state.view === "plans") el.innerHTML = renderPlans();
   else if(state.view === "habits") el.innerHTML = renderHabits();
@@ -1040,6 +1040,7 @@ function renderLog() {
 
   html += '</div>';
   html += '<div id="qTypeToggle" style="display:flex;gap:4px;background:var(--bg);border-radius:16px;padding:3px;margin-bottom:8px;width:fit-content"></div>';
+  html += '<div id="qUnitWrap" class="f" style="display:none"><label>Distance Unit</label><select id="q_unit" onchange="quickLogUnit=this.value"><option value="mi">Miles</option><option value="km">Kilometers</option><option value="m">Meters</option></select></div>';
   html += '<label style="display:flex;align-items:center;gap:6px;margin-bottom:8px;cursor:pointer"><input type="checkbox" id="qEachSide" onchange="quickLogEachSide=this.checked" style="width:14px;height:14px"/><span style="font-size:11px;color:var(--muted)">Each side</span></label>';
   html += '<div style="font-family:Barlow Condensed;font-size:9px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:5px">Sets</div>';
   html += '<div id="qSetRowsList" style="margin-bottom:8px"></div>';
@@ -1086,9 +1087,10 @@ function renderExGroupTrainer(g) {
     +'</div>';
   html += '<div style="display:flex;flex-direction:column;gap:3px;margin:6px 0">';
   g.sets.forEach(function(s,i){
-    var unit = s.log_type === "time" ? " sec" : " reps";
+    var unit = s.log_type === "time" ? " sec" : s.log_type === "distance" ? " " + (s.distance_unit||"mi") : " reps";
+    var valueDisplay = s.log_type === "distance" ? (s.distance||"?") : (s.reps||"?");
     html += '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted)">'
-      + '<span>Set '+(i+1)+': '+(s.reps||"?")+unit+(s.each_side?' each':'')+(s.weight?' @ '+s.weight+' lbs':'')+'</span>'
+      + '<span>Set '+(i+1)+': '+valueDisplay+unit+(s.each_side?' each':'')+(s.weight?' @ '+s.weight+' lbs':'')+'</span>'
       + '<button data-exid="'+s.id+'" class="del-ex-btn" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:11px;text-decoration:underline;padding:2px 4px">remove</button>'
       + '</div>';
   });
@@ -2865,19 +2867,23 @@ function openShare() {
 
 var quickLogType = "reps";
 var quickLogEachSide = false;
+var quickLogUnit = "mi";
 
 function setQuickLogType(type) {
   var vals = captureSetValues("q");
   quickLogType = type;
-  renderSetRows("q", "qSetRowsList", vals, type==="time");
+  renderSetRows("q", "qSetRowsList", vals, type);
   renderQuickTypeToggle();
+  var unitWrap = document.getElementById("qUnitWrap");
+  if(unitWrap) unitWrap.style.display = type==="distance" ? "block" : "none";
 }
 
 function renderQuickTypeToggle() {
   var el = document.getElementById("qTypeToggle");
   if(!el) return;
-  el.innerHTML = '<button onclick="setQuickLogType(\'reps\')" style="padding:5px 12px;border-radius:13px;border:none;cursor:pointer;font-size:11px;font-weight:700;background:'+(quickLogType!=="time"?"var(--teal)":"transparent")+';color:'+(quickLogType!=="time"?"#fff":"var(--muted)")+'">Reps</button>'
-    + '<button onclick="setQuickLogType(\'time\')" style="padding:5px 12px;border-radius:13px;border:none;cursor:pointer;font-size:11px;font-weight:700;background:'+(quickLogType==="time"?"var(--teal)":"transparent")+';color:'+(quickLogType==="time"?"#fff":"var(--muted)")+'">Time</button>';
+  el.innerHTML = '<button onclick="setQuickLogType(\'reps\')" style="padding:5px 12px;border-radius:13px;border:none;cursor:pointer;font-size:11px;font-weight:700;background:'+(quickLogType==="reps"?"var(--teal)":"transparent")+';color:'+(quickLogType==="reps"?"#fff":"var(--muted)")+'">Reps</button>'
+    + '<button onclick="setQuickLogType(\'time\')" style="padding:5px 12px;border-radius:13px;border:none;cursor:pointer;font-size:11px;font-weight:700;background:'+(quickLogType==="time"?"var(--teal)":"transparent")+';color:'+(quickLogType==="time"?"#fff":"var(--muted)")+'">Time</button>'
+    + '<button onclick="setQuickLogType(\'distance\')" style="padding:5px 12px;border-radius:13px;border:none;cursor:pointer;font-size:11px;font-weight:700;background:'+(quickLogType==="distance"?"var(--teal)":"transparent")+';color:'+(quickLogType==="distance"?"#fff":"var(--muted)")+'">Distance</button>';
 }
 
 async function quickLogEx() {
@@ -2896,8 +2902,18 @@ async function quickLogEx() {
   if(btn) { btn.textContent = "Saving..."; btn.disabled = true; }
 
   try {
+    var isDistance = quickLogType === "distance";
+    var unitSel = document.getElementById("q_unit");
+    var unit = unitSel ? unitSel.value : quickLogUnit;
     var payload = setVals.map(function(r){
-      return { client_id: state.activeId, exercise: ex, sets: 1, reps: r.reps, weight: r.weight, muscle: "Full Body", notes: "", date: tod(), from_plan: false, log_type: quickLogType, each_side: quickLogEachSide };
+      return {
+        client_id: state.activeId, exercise: ex, sets: 1,
+        reps: isDistance ? null : r.reps,
+        distance: isDistance ? r.reps : null,
+        distance_unit: isDistance ? unit : null,
+        weight: r.weight, muscle: "Full Body", notes: "", date: tod(), from_plan: false,
+        log_type: quickLogType, each_side: quickLogEachSide
+      };
     });
     var data = await api("workout_logs", {method:"POST", body:JSON.stringify(payload)});
     if(data && data.length) {
@@ -2927,14 +2943,21 @@ function captureSetValues(prefix) {
   return vals;
 }
 
-function renderSetRows(prefix, containerId, prefill, isTime) {
+function renderSetRows(prefix, containerId, prefill, mode) {
   var vals = prefill || captureSetValues(prefix);
+  // backward compat: callers may still pass a boolean (true = time)
+  if(mode === true) mode = "time";
+  if(mode === false || mode == null) mode = "reps";
+  var isTime = mode === "time";
+  var isDistance = mode === "distance";
+  var placeholder = isTime ? "e.g. 45 sec" : isDistance ? "e.g. 1.5" : "Reps";
+  var inputType = (isTime) ? "text" : "number";
   var html = "";
   for(var i=0;i<setRowCounts[prefix];i++) {
     var v = vals[i] || {reps:"",weight:""};
     html += '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">'
       + '<div style="width:20px;font-size:11px;color:var(--muted);font-weight:700;flex-shrink:0">'+(i+1)+'</div>'
-      + '<input type="'+(isTime?"text":"number")+'" inputmode="'+(isTime?"text":"numeric")+'" placeholder="'+(isTime?"e.g. 45 sec":"Reps")+'" id="'+prefix+'_set_reps_'+i+'" value="'+(v.reps||"")+'" style="flex:1;min-width:0;background:var(--bg);border:1.5px solid var(--b1);border-radius:7px;padding:9px;color:var(--txt);font-size:13px;outline:none">'
+      + '<input type="'+(isTime?"text":inputType)+'" inputmode="'+(isTime?"text":"decimal")+'" placeholder="'+placeholder+'" id="'+prefix+'_set_reps_'+i+'" value="'+(v.reps||"")+'" style="flex:1;min-width:0;background:var(--bg);border:1.5px solid var(--b1);border-radius:7px;padding:9px;color:var(--txt);font-size:13px;outline:none">'
       + '<input type="number" inputmode="decimal" placeholder="Weight" id="'+prefix+'_set_weight_'+i+'" value="'+(v.weight||"")+'" style="flex:1;min-width:0;background:var(--bg);border:1.5px solid var(--b1);border-radius:7px;padding:9px;color:var(--txt);font-size:13px;outline:none">'
       + (setRowCounts[prefix]>1 ? '<button onclick="removeSetRow(\''+prefix+'\',\''+containerId+'\','+i+')" style="background:transparent;border:none;color:var(--muted);font-size:16px;cursor:pointer;padding:0 4px;flex-shrink:0">✕</button>' : '')
       + '</div>';
@@ -2959,20 +2982,24 @@ function removeSetRow(prefix, containerId, idx) {
 var logExBlockIds = [0];
 var logExNextBlockId = 1;
 var logExBlockTypes = {0:"reps"};
+var logExBlockUnits = {0:"mi"};
 
 function setLogExBlockType(bid, type) {
   var vals = captureSetValues("le"+bid);
   logExBlockTypes[bid] = type;
-  renderSetRows("le"+bid, "logExSetRowsList_"+bid, vals, type==="time");
+  renderSetRows("le"+bid, "logExSetRowsList_"+bid, vals, type);
   renderLogExTypeToggle(bid);
+  var unitWrap = document.getElementById("logExUnitWrap_"+bid);
+  if(unitWrap) unitWrap.style.display = type==="distance" ? "block" : "none";
 }
 
 function renderLogExTypeToggle(bid) {
   var el = document.getElementById("logExTypeToggle_"+bid);
   if(!el) return;
   var t = logExBlockTypes[bid] || "reps";
-  el.innerHTML = '<button onclick="setLogExBlockType('+bid+',\'reps\')" style="padding:5px 12px;border-radius:13px;border:none;cursor:pointer;font-size:11px;font-weight:700;background:'+(t!=="time"?"var(--teal)":"transparent")+';color:'+(t!=="time"?"#fff":"var(--muted)")+'">Reps</button>'
-    + '<button onclick="setLogExBlockType('+bid+',\'time\')" style="padding:5px 12px;border-radius:13px;border:none;cursor:pointer;font-size:11px;font-weight:700;background:'+(t==="time"?"var(--teal)":"transparent")+';color:'+(t==="time"?"#fff":"var(--muted)")+'">Time</button>';
+  el.innerHTML = '<button onclick="setLogExBlockType('+bid+',\'reps\')" style="padding:5px 12px;border-radius:13px;border:none;cursor:pointer;font-size:11px;font-weight:700;background:'+(t==="reps"?"var(--teal)":"transparent")+';color:'+(t==="reps"?"#fff":"var(--muted)")+'">Reps</button>'
+    + '<button onclick="setLogExBlockType('+bid+',\'time\')" style="padding:5px 12px;border-radius:13px;border:none;cursor:pointer;font-size:11px;font-weight:700;background:'+(t==="time"?"var(--teal)":"transparent")+';color:'+(t==="time"?"#fff":"var(--muted)")+'">Time</button>'
+    + '<button onclick="setLogExBlockType('+bid+',\'distance\')" style="padding:5px 12px;border-radius:13px;border:none;cursor:pointer;font-size:11px;font-weight:700;background:'+(t==="distance"?"var(--teal)":"transparent")+';color:'+(t==="distance"?"#fff":"var(--muted)")+'">Distance</button>';
 }
 
 function renderLogExBlocks() {
@@ -2990,6 +3017,8 @@ function renderLogExBlocks() {
     html += '</div>';
     html += '<div class="f"><label>Muscle Group</label><select id="le_muscle_'+bid+'"><option>Chest</option><option>Back</option><option>Shoulders</option><option>Biceps</option><option>Triceps</option><option>Legs</option><option>Glutes</option><option>Core</option><option>Cardio</option><option>Full Body</option></select></div>';
     html += '<div id="logExTypeToggle_'+bid+'" style="display:flex;gap:4px;background:var(--bg);border-radius:16px;padding:3px;margin-bottom:8px;width:fit-content"></div>';
+    html += '<label style="display:flex;align-items:center;gap:8px;margin:0 0 8px;cursor:pointer"><input type="checkbox" id="le_each_side_'+bid+'" style="width:16px;height:16px"/><span style="font-size:12px;color:var(--muted)">Each side (unilateral exercise)</span></label>';
+    html += '<div id="logExUnitWrap_'+bid+'" class="f" style="display:none"><label>Distance Unit</label><select id="le_unit_'+bid+'"><option value="mi">Miles</option><option value="km">Kilometers</option><option value="m">Meters</option></select></div>';
     html += '<div style="font-family:Barlow Condensed;font-size:9px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin:8px 0 5px">Sets</div>';
     html += '<div id="logExSetRowsList_'+bid+'" style="margin-bottom:8px"></div>';
     html += '<button onclick="addSetRow(\'le'+bid+'\',\'logExSetRowsList_'+bid+'\')" style="width:100%;background:var(--s1);border:1px dashed var(--b1);border-radius:7px;padding:8px;color:var(--muted);font-size:12px;font-weight:700;cursor:pointer">+ Add Set</button>';
@@ -2999,8 +3028,13 @@ function renderLogExBlocks() {
   logExBlockIds.forEach(function(bid){
     setRowCounts["le"+bid] = 3;
     if(!logExBlockTypes[bid]) logExBlockTypes[bid] = "reps";
-    renderSetRows("le"+bid, "logExSetRowsList_"+bid, [{reps:"",weight:""},{reps:"",weight:""},{reps:"",weight:""}], logExBlockTypes[bid]==="time");
+    if(!logExBlockUnits[bid]) logExBlockUnits[bid] = "mi";
+    renderSetRows("le"+bid, "logExSetRowsList_"+bid, [{reps:"",weight:""},{reps:"",weight:""},{reps:"",weight:""}], logExBlockTypes[bid]);
     renderLogExTypeToggle(bid);
+    var unitWrap = document.getElementById("logExUnitWrap_"+bid);
+    if(unitWrap) unitWrap.style.display = logExBlockTypes[bid]==="distance" ? "block" : "none";
+    var unitSel = document.getElementById("le_unit_"+bid);
+    if(unitSel) unitSel.value = logExBlockUnits[bid];
   });
 }
 
@@ -3080,10 +3114,14 @@ async function saveLogEx() {
   var blocks = logExBlockIds.map(function(bid){
     var exEl = document.getElementById("le_exercise_"+bid);
     var muscleEl = document.getElementById("le_muscle_"+bid);
+    var eachSideEl = document.getElementById("le_each_side_"+bid);
+    var unitEl = document.getElementById("le_unit_"+bid);
     return {
       exercise: exEl ? exEl.value.trim() : "",
       muscle: muscleEl ? muscleEl.value : "Full Body",
       type: logExBlockTypes[bid] || "reps",
+      eachSide: eachSideEl ? eachSideEl.checked : false,
+      unit: unitEl ? unitEl.value : "mi",
       setVals: captureSetValues("le"+bid).filter(function(r){ return String(r.reps).trim()!=="" || String(r.weight).trim()!==""; })
     };
   }).filter(function(b){ return b.exercise && b.setVals.length; });
@@ -3097,8 +3135,16 @@ async function saveLogEx() {
   try {
     var payload = [];
     blocks.forEach(function(b){
+      var isDistance = b.type === "distance";
       b.setVals.forEach(function(r){
-        payload.push({ client_id: state.activeId, exercise: b.exercise, sets: 1, reps: r.reps, weight: r.weight, muscle: b.muscle, notes: notes, date: date, from_plan: false, exercise_group: groupId, log_type: b.type });
+        payload.push({
+          client_id: state.activeId, exercise: b.exercise, sets: 1,
+          reps: isDistance ? null : r.reps,
+          distance: isDistance ? r.reps : null,
+          distance_unit: isDistance ? b.unit : null,
+          weight: r.weight, muscle: b.muscle, notes: notes, date: date, from_plan: false,
+          exercise_group: groupId, log_type: b.type, each_side: b.eachSide
+        });
       });
     });
     var data = await api("workout_logs", {method:"POST", body:JSON.stringify(payload)});
