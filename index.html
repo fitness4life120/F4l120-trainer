@@ -1548,14 +1548,19 @@ function renderExCardTrainer(ex) {
   var pr = getExercisePR(state.cLogs, ex.name);
   var hasVid = !!state.exerciseVideos[ex.name];
   var isTime = ex.type === "time";
-  var html = '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:7px;padding:9px 12px;margin-bottom:5px">';
+  var done = state.cLogs.some(function(l){ return l.date === state.selCalDate && l.exercise === ex.name; });
+  var html = '<div style="background:'+(done?"rgba(45,186,128,0.08)":"var(--s1)")+';border:1px solid '+(done?"rgba(45,186,128,0.2)":"var(--b1)")+';border-left:3px solid '+(done?"var(--green)":"var(--gold)")+';border-radius:7px;padding:9px 12px;margin-bottom:5px">';
   html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">';
   html += '<span style="font-size:13px;font-weight:600">'+esc(ex.name)+(isTime?' <span style="font-size:9px;color:var(--gold);background:var(--gold2);border-radius:3px;padding:1px 5px;margin-left:4px">TIME</span>':'')+'</span>';
   html += '<span style="font-size:10px;color:'+(hasVid?"var(--green)":"var(--muted)")+'">'+(hasVid?"🎥":"")+'</span>';
   html += '</div>';
   html += '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+ex.sets+'×'+ex.reps+(ex.each_side?' each':'')+(ex.weight?' @ '+esc(ex.weight)+' lbs':'')+(ex.muscle?' · '+esc(ex.muscle):'')+(ex.rest?' · Rest '+esc(ex.rest):'')+'</div>';
   if(pr) html += '<div style="font-size:10px;color:var(--gold);margin-top:2px;font-weight:700">🏆 PR: '+pr.weight+' lbs × '+pr.reps+(pr.log_type==="time"?" sec":"")+'</div>';
-  html += '<button onclick="logPlanExFromTrainerByName(\''+ex.name.replace(/'/g,"\\'")+'\',\''+(ex.group||"")+'\')" style="background:var(--teal3);border:1px solid var(--teal);color:var(--teal2);border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;margin-top:6px">Log It</button>';
+  if(done) {
+    html += '<span style="display:inline-block;font-size:11px;color:var(--green);font-weight:700;margin-top:6px">✓ Completed</span>';
+  } else {
+    html += '<button onclick="logPlanExFromTrainerByName(\''+ex.name.replace(/'/g,"\\'")+'\',\''+(ex.group||"")+'\')" style="background:var(--teal3);border:1px solid var(--teal);color:var(--teal2);border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;margin-top:6px">Log It</button>';
+  }
   html += '</div>';
   return html;
 }
@@ -1596,13 +1601,17 @@ function renderTrainerCal() {
   for(var d=1; d<=daysInMonth; d++) {
     var dateStr = y+'-'+(m+1<10?'0'+(m+1):(m+1))+'-'+(d<10?'0'+d:d);
     var hasPlan = state.datedPlans && state.datedPlans.some(function(p){return p.date===dateStr;});
+    var hasLog = state.cLogs && state.cLogs.some(function(l){return l.date===dateStr;});
     var isToday = dateStr === today;
     var isSel = state.selCalDate === dateStr;
     var bg = isSel ? 'var(--teal)' : isToday ? 'var(--teal3)' : hasPlan ? 'var(--gold2)' : 'var(--bg)';
     var border = isSel ? 'var(--teal)' : isToday ? 'var(--teal)' : hasPlan ? 'rgba(201,168,76,0.3)' : 'var(--b1)';
     var color = isSel ? '#fff' : isToday ? 'var(--teal2)' : hasPlan ? 'var(--gold)' : 'var(--txt)';
     html += '<div data-caldate="'+dateStr+'" style="text-align:center;padding:7px 2px;border-radius:6px;background:'+bg+';border:1px solid '+border+';cursor:pointer;font-family:Barlow Condensed;font-size:12px;font-weight:700;color:'+color+'">'+d;
-    if(hasPlan) html += '<div style="width:4px;height:4px;background:var(--gold);border-radius:50%;margin:1px auto 0"></div>';
+    html += '<div style="display:flex;justify-content:center;gap:2px;margin-top:1px">';
+    if(hasPlan) html += '<div style="width:4px;height:4px;background:var(--gold);border-radius:50%"></div>';
+    if(hasLog) html += '<div style="width:4px;height:4px;background:var(--green);border-radius:50%"></div>';
+    html += '</div>';
     html += '</div>';
   }
   html += '</div>';
