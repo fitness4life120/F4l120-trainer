@@ -544,6 +544,42 @@ body{font-family:'Barlow',sans-serif;color:var(--txt)}
   </div>
 </div>
 
+<div class="overlay" id="mealPlanSheet">
+  <div class="sheet" style="max-height:85vh;overflow-y:auto">
+    <div class="hdl"></div>
+    <div class="stitle">Meal Plan — <span id="mealPlanDateLabel"></span></div>
+    <button class="bp" id="mealPlanAISuggestBtn" onclick="suggestFullDayMeals()" style="margin-bottom:14px">🤖 AI Suggest Full Day</button>
+    <div id="mealPlanAIStatus" style="font-size:12px;color:var(--muted);text-align:center;margin-bottom:10px;display:none">Generating suggestions based on this client's targets…</div>
+    <div style="font-family:Barlow Condensed;font-size:9px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">Meals in This Plan</div>
+    <div id="mealPlanList" style="margin-bottom:14px"></div>
+    <div style="border-top:1px solid var(--b1);padding-top:14px">
+      <div class="f"><label>Meal Name</label><input id="mp_name" list="mealPlanFoodList" placeholder="e.g. Grilled Chicken & Rice Bowl"/></div>
+      <datalist id="mealPlanFoodList"></datalist>
+      <div class="f"><label>Meal Time</label>
+        <select id="mp_time">
+          <option>Breakfast</option><option>Morning Snack</option><option>Lunch</option><option>Afternoon Snack</option><option>Dinner</option><option>Evening Snack</option><option>Pre-Workout</option><option>Post-Workout</option>
+        </select>
+      </div>
+      <div class="fr2">
+        <div class="f"><label>Calories</label><input type="number" id="mp_cal" placeholder="e.g. 450"/></div>
+        <div class="f"><label>Serving Note</label><input id="mp_serving" placeholder="e.g. 6oz chicken, 1 cup rice"/></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px">
+        <div class="f"><label>Protein</label><input type="number" id="mp_pro" placeholder="35"/></div>
+        <div class="f"><label>Carbs</label><input type="number" id="mp_carb" placeholder="45"/></div>
+        <div class="f"><label>Fat</label><input type="number" id="mp_fat" placeholder="12"/></div>
+        <div class="f"><label>Fiber</label><input type="number" id="mp_fiber" placeholder="5"/></div>
+      </div>
+      <button class="bgold" id="mealPlanAddBtn" onclick="addMealPlanMeal()">+ Add Meal</button>
+      <div id="mealPlanCancelEditWrap" style="display:none;text-align:center;margin-top:6px">
+        <a href="javascript:void(0)" onclick="cancelMealPlanEdit()" style="font-size:12px;color:var(--muted);text-decoration:underline">Cancel Edit</a>
+      </div>
+    </div>
+    <button class="bp" style="margin-top:14px" onclick="saveMealPlan()">Save Meal Plan</button>
+    <button class="bg_" onclick="closeSheet('mealPlanSheet')">Close</button>
+  </div>
+</div>
+
 <div class="overlay" id="logExSheet">
   <div class="sheet">
     <div class="hdl"></div>
@@ -574,6 +610,7 @@ body{font-family:'Barlow',sans-serif;color:var(--txt)}
 
 <script>
 const SUPA = "https://egzpfzolkivxgijzqtql.supabase.co";
+const NUTRITION_PROXY_URL = "https://poetic-blancmange-2af485.netlify.app/.netlify/functions/claude";
 const KEY  = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVnenBmem9sa2l2eGdpanpxdHFsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5ODc2NDQsImV4cCI6MjA5MzU2MzY0NH0.RKg7hqJbOxARaC218BLLDNx9IRWnXpoUrAYUz2BE3lg";
 const EXERCISES = [{"name": "1/2 Step Up W/Knee Drive", "category": "Legs"}, {"name": "1/2 Step Ups", "category": "Legs"}, {"name": "21 Barbell", "category": "Biceps"}, {"name": "21's (Easybar)", "category": "Biceps"}, {"name": "21s", "category": "Biceps"}, {"name": "6 inches", "category": "Core"}, {"name": "Ab Roller", "category": "Core"}, {"name": "Abductor", "category": "Legs"}, {"name": "Adductor", "category": "Legs"}, {"name": "Alienating Thruster", "category": "Full Body"}, {"name": "Alt. High Knee", "category": "Core"}, {"name": "Alternating Bicep Cutl", "category": "Biceps"}, {"name": "Alternating Birddog", "category": "Core"}, {"name": "Alternating Cable Row", "category": "Back"}, {"name": "Alternating Close Grip Lat Pulldown", "category": "Back"}, {"name": "Alternating Deadbug", "category": "Core"}, {"name": "Alternating Dumbbell Curls", "category": "Biceps"}, {"name": "Alternating Dumbbell Flat Press", "category": "Chest"}, {"name": "Alternating Dumbbell Hammer Curls", "category": "Biceps"}, {"name": "Alternating Dumbbell Incline Chest Press", "category": "Chest"}, {"name": "Alternating Dumbbell Row", "category": "Back"}, {"name": "Alternating Hammer Curl", "category": "Biceps"}, {"name": "Alternating Leg Press", "category": "Legs"}, {"name": "Alternating Low Plank", "category": "Core"}, {"name": "Alternating Reverse Lunge", "category": "Legs"}, {"name": "Alternating Superman", "category": "Core"}, {"name": "Alternating Thruster", "category": "Full Body"}, {"name": "Arnold Press", "category": "Shoulders"}, {"name": "Around The World", "category": "Shoulders"}, {"name": "Assault Bike", "category": "Cardio"}, {"name": "Assistated Pullups", "category": "Back"}, {"name": "Assisted Dips", "category": "Biceps"}, {"name": "Assisted Pull Ups", "category": "Back"}, {"name": "Australian Squat", "category": "Legs"}, {"name": "Back Extensions", "category": "Back"}, {"name": "Backward Step Up", "category": "Legs"}, {"name": "Ball Slams", "category": "Core"}, {"name": "Band Monster Walk", "category": "Full Body"}, {"name": "Band Squat (Hips)", "category": "Legs"}, {"name": "Band Walk", "category": "Legs"}, {"name": "Barbell Box Squats", "category": "Legs"}, {"name": "Battle Ropes", "category": "Cardio"}, {"name": "Bench Burpee", "category": "Full Body"}, {"name": "Bench Dips", "category": "Biceps"}, {"name": "Bench Knee Tuck", "category": "Core"}, {"name": "Bench Press (Barbell)", "category": "Chest"}, {"name": "Bench press (Dumbbell)", "category": "Chest"}, {"name": "Bent Arm Lateral Raise", "category": "Shoulders"}, {"name": "Bent Over Row (Barbell)", "category": "Back"}, {"name": "Bent Over Row (Dumbbell)", "category": "Back"}, {"name": "Bent Over Single Low Row", "category": "Back"}, {"name": "Bicep Bar Cable Curl", "category": "Biceps"}, {"name": "Bicep Curl (Barbell)", "category": "Biceps"}, {"name": "Bicep Curl (Dumbbell)", "category": "Biceps"}, {"name": "Bicep Curl (Easy Bar)", "category": "Biceps"}, {"name": "Bicep Curl Single Arm (Cable)", "category": "Biceps"}, {"name": "Bicycle Crunches", "category": "Core"}, {"name": "Bird Dog", "category": "Core"}, {"name": "Body Weight Squat (Ramp)", "category": "Legs"}, {"name": "Bodyweight Squats", "category": "Legs"}, {"name": "Bosu Feet on Hip Thrust", "category": "Legs"}, {"name": "Bosu Forward Lunge", "category": "Legs"}, {"name": "Bosu Spilt Squat", "category": "Legs"}, {"name": "Box Jumps", "category": "Cardio"}, {"name": "Box Squat", "category": "Legs"}, {"name": "Bulgarian Split Squat", "category": "Legs"}, {"name": "Bulgarian Split Squat (Bosu)", "category": "Legs"}, {"name": "Burpees", "category": "Cardio"}, {"name": "Cable Bar Bicep Curl", "category": "Biceps"}, {"name": "Cable Chest Flys", "category": "Chest"}, {"name": "Cable Crossover (High)", "category": "Chest"}, {"name": "Cable Crossover (Low)", "category": "Chest"}, {"name": "Cable Face Curls", "category": "Biceps"}, {"name": "Cable Front Raises", "category": "Shoulders"}, {"name": "Cable Hammer Curls", "category": "Biceps"}, {"name": "Cable Rear Delt Flys", "category": "Shoulders"}, {"name": "Cable Rope Hammer Curl", "category": "Biceps"}, {"name": "Cable Single Arm Lateral Raises", "category": "Shoulders"}, {"name": "Cable Single Arm Rear Delt Flys", "category": "Shoulders"}, {"name": "Cable Straight Bar Curl", "category": "Biceps"}, {"name": "Cable Torso Rotation", "category": "Core"}, {"name": "Cable Upright Row", "category": "Shoulders"}, {"name": "Cable Woodchopper", "category": "Core"}, {"name": "Calf Raise on Leg Press", "category": "Legs"}, {"name": "Cat Cow", "category": "Back"}, {"name": "Chest Fly to Close Grip Chest Press", "category": "Chest"}, {"name": "Chest Press (Dumbbell)", "category": "Chest"}, {"name": "Chest Press (Easy Bar)", "category": "Chest"}, {"name": "Chest Press (Machine)", "category": "Chest"}, {"name": "Chest Press Flat Bench (Single Arm)", "category": "Chest"}, {"name": "Chicken Wing", "category": "Shoulders"}, {"name": "Chin Ups", "category": "Back"}, {"name": "Close Grip Bench Press", "category": "Biceps"}, {"name": "Concentration Curl", "category": "Biceps"}, {"name": "Converging Chest Press", "category": "Chest"}, {"name": "Cossack Squat", "category": "Legs"}, {"name": "Cross Body Bicep Curl", "category": "Biceps"}, {"name": "Crossover Hammer Curl", "category": "Biceps"}, {"name": "Crunch Hold Heal Tap", "category": "Core"}, {"name": "Crunch Hold Sissor Kick", "category": "Core"}, {"name": "Crunches", "category": "Core"}, {"name": "Curtsy Lunge", "category": "Legs"}, {"name": "DB Chest fly", "category": "Chest"}, {"name": "DB Deadlift", "category": "Legs"}, {"name": "DB High Row", "category": "Back"}, {"name": "DB Low Row", "category": "Back"}, {"name": "DB Static Hold Chest Press", "category": "Chest"}, {"name": "DB Static Hold Overhead Shoulder Press", "category": "Shoulders"}, {"name": "Dead Bug", "category": "Core"}, {"name": "Dead Bug Press", "category": "Core"}, {"name": "Deadbug", "category": "Core"}, {"name": "Deadbug Press", "category": "Core"}, {"name": "Deadlift (Barbell)", "category": "Back"}, {"name": "Deadlift (Easy Bar)", "category": "Legs"}, {"name": "Deadlift (Kettlebell)", "category": "Legs"}, {"name": "Deadlift (Trapbar)", "category": "Legs"}, {"name": "Deadlift Single Arm", "category": "Legs"}, {"name": "Decline Bench Press (Barbell)", "category": "Chest"}, {"name": "Decline Bench Press (Dumbbell)", "category": "Chest"}, {"name": "Decline Chest Press (Machine)", "category": "Chest"}, {"name": "Decline Press (Machine)", "category": "Chest"}, {"name": "Decline Pushup", "category": "Chest"}, {"name": "Decline Sit Up", "category": "Core"}, {"name": "Decline Smith Barbell Press", "category": "Chest"}, {"name": "Decline Static Hokd Bench Press (Dumbbellsl", "category": "Chest"}, {"name": "Dips (Chest Focus)", "category": "Chest"}, {"name": "Dips (Tricep Focus)", "category": "Biceps"}, {"name": "Diverging High Row", "category": "Back"}, {"name": "Diverging Seated Row", "category": "Back"}, {"name": "Donkey Calf Raise", "category": "Legs"}, {"name": "Double Lateral Cable Raise", "category": "Shoulders"}, {"name": "Double Leg Over", "category": "Legs"}, {"name": "Dumbbell Alternating Front Raises", "category": "Shoulders"}, {"name": "Dumbbell Deadlift Full", "category": "Legs"}, {"name": "Dumbbell Deadlift to Low Row", "category": "Full Body"}, {"name": "Dumbbell Deadlift to Squat", "category": "Legs"}, {"name": "Dumbbell Deadlit to Low Row", "category": "Full Body"}, {"name": "Dumbbell Flys", "category": "Chest"}, {"name": "Dumbbell Lateral Lunge", "category": "Legs"}, {"name": "Dumbbell Lateral Shift", "category": "Legs"}, {"name": "Dumbbell Overhead Tricep Extension", "category": "Triceps"}, {"name": "Dumbbell Press (Flat)", "category": "Chest"}, {"name": "Dumbbell Press (Incline)", "category": "Chest"}, {"name": "Dumbbell Rear Delt Flys", "category": "Shoulders"}, {"name": "Dumbbell Shoulder Press", "category": "Shoulders"}, {"name": "Dumbbell Skull Cruiser", "category": "Biceps"}, {"name": "Dumbbell Squat", "category": "Legs"}, {"name": "Dumbbell Standing Alternating Shoulder Press", "category": "Shoulders"}, {"name": "Dumbbell Standing Shoulder Press", "category": "Shoulders"}, {"name": "Dumbbell Sumo Deadlift", "category": "Legs"}, {"name": "Dumbbell Sumo Squat", "category": "Legs"}, {"name": "EZ Bar Curl", "category": "Biceps"}, {"name": "Easy Bar Bicep Curl", "category": "Biceps"}, {"name": "Easybar Row", "category": "Back"}, {"name": "Exercise Ball Crunch", "category": "Core"}, {"name": "Exercise Chest Press", "category": "Chest"}, {"name": "Face Pulls", "category": "Back"}, {"name": "Farmers Walk", "category": "Core"}, {"name": "Farmers Walk (Single)", "category": "Core"}, {"name": "Feet on Bosu Glute Bridge", "category": "Legs"}, {"name": "Flutter Kicks", "category": "Core"}, {"name": "Forward Backward Hops", "category": "Full Body"}, {"name": "Forward Backward Hurdle Hops", "category": "Legs"}, {"name": "Forward Backward Walk", "category": "Full Body"}, {"name": "Forward Lunge Torso Rotation", "category": "Legs"}, {"name": "Front Hold Squat", "category": "Legs"}, {"name": "Front Hops", "category": "Legs"}, {"name": "Front Raise (Barbell)", "category": "Shoulders"}, {"name": "Front Raise (Dumbbell)", "category": "Shoulders"}, {"name": "Front Squat (Barbell)", "category": "Legs"}, {"name": "Front to Lateral Raise", "category": "Shoulders"}, {"name": "Glute Bridge", "category": "Legs"}, {"name": "Glute Bridge Shoulder On Bench", "category": "Legs"}, {"name": "Glute Donkey Kick", "category": "Legs"}, {"name": "Glute Lift", "category": "Glutes"}, {"name": "Goblet Bench Sit to Stand", "category": "Legs"}, {"name": "Goblet Lateral Lunge to Curtsy", "category": "Legs"}, {"name": "Goblet Lateral Shift", "category": "Legs"}, {"name": "Goblet Squat", "category": "Legs"}, {"name": "Goblet Squat (Ramp)", "category": "Legs"}, {"name": "Goblet Squat (Upramp)", "category": "Legs"}, {"name": "Goblet Squat Hold Walk", "category": "Legs"}, {"name": "Goblet Squat Pulsating (Ramp) l", "category": "Legs"}, {"name": "Goblet Sumo Squat", "category": "Legs"}, {"name": "Goblet Tap Squat", "category": "Legs"}, {"name": "Good Morning Machine", "category": "Back"}, {"name": "Good Mornings", "category": "Back"}, {"name": "Gorilla Row", "category": "Back"}, {"name": "Guillotine Press", "category": "Chest"}, {"name": "Hack Squat", "category": "Legs"}, {"name": "Hammer (Bar)", "category": "Biceps"}, {"name": "Hammer Curl", "category": "Biceps"}, {"name": "Hammer Curl (Cable Rope)", "category": "Biceps"}, {"name": "Hammer Curl (Triangle Bar)", "category": "Biceps"}, {"name": "Hammer Curl to Step Up", "category": "Full Body"}, {"name": "Hammer to Bicep Curl", "category": "Biceps"}, {"name": "Hanging Leg Raise", "category": "Core"}, {"name": "Heel Elevated Barbell Squats", "category": "Legs"}, {"name": "Heel Elevated Goblet Squat", "category": "Legs"}, {"name": "Heel Elevated Smith Squats", "category": "Legs"}, {"name": "Heels Elevated Goblet Squat", "category": "Legs"}, {"name": "High Foot Placement Leg Press", "category": "Legs"}, {"name": "High Low Plank", "category": "Core"}, {"name": "High Plank", "category": "Core"}, {"name": "High Plank Pull Through", "category": "Core"}, {"name": "High Plank Shoulder Tap", "category": "Core"}, {"name": "High Plankn Shoulder Tap", "category": "Core"}, {"name": "Hip Hinge Swing", "category": "Full Body"}, {"name": "Hip Rocks", "category": "Core"}, {"name": "Hip Thrust (Barbell)", "category": "Legs"}, {"name": "Hip Thrust Machine", "category": "Legs"}, {"name": "Hurdle Hops", "category": "Legs"}, {"name": "Hyper Back Extension", "category": "Back"}, {"name": "Incline Bench Press ((Single Arm)", "category": "Chest"}, {"name": "Incline Bench Press (Barbell)", "category": "Chest"}, {"name": "Incline Bench Press (Dumbbell)", "category": "Chest"}, {"name": "Incline Bicep Curl", "category": "Biceps"}, {"name": "Incline Chest Fly", "category": "Chest"}, {"name": "Incline Chest Press Machine (Close Grip)", "category": "Chest"}, {"name": "Incline Chest Press Machine (Hammer Strength)", "category": "Chest"}, {"name": "Incline Chest Press Single Arm", "category": "Chest"}, {"name": "Incline Close Grip Chest Press", "category": "Chest"}, {"name": "Incline DB Tricep Kickback", "category": "Biceps"}, {"name": "Incline Dumbbell Chest Press", "category": "Biceps"}, {"name": "Incline Dumbbell Close Grip Chest Press", "category": "Biceps"}, {"name": "Incline Dumbbell Curls", "category": "Biceps"}, {"name": "Incline Dumbbell Flys", "category": "Chest"}, {"name": "Incline Hammer Curls", "category": "Biceps"}, {"name": "Incline Machine Chest Flys", "category": "Chest"}, {"name": "Incline Press Machine", "category": "Chest"}, {"name": "Incline Pushups", "category": "Chest"}, {"name": "Jump Rope", "category": "Cardio"}, {"name": "Jumping Jacks", "category": "Cardio"}, {"name": "Kettle Bell Deadlift", "category": "Legs"}, {"name": "Kettle Bell Squat", "category": "Legs"}, {"name": "Kettlebell Alt. Low Row", "category": "Back"}, {"name": "Kettlebell Overs", "category": "Legs"}, {"name": "Kettlebell Shoulder Press", "category": "Shoulders"}, {"name": "Kettlebell Swings", "category": "Cardio"}, {"name": "Kettlebell Thrusters", "category": "Full Body"}, {"name": "Kickback (Dumbbell)", "category": "Biceps"}, {"name": "Kneeling Cable Crunch", "category": "Core"}, {"name": "Knees to Stand to Jump", "category": "Full Body"}, {"name": "Ladder Squats", "category": "Legs"}, {"name": "Landmine Low Row", "category": "Back"}, {"name": "Lat Machine", "category": "Shoulders"}, {"name": "Lat Pulldown (Close Grip)", "category": "Back"}, {"name": "Lat Pulldown (Wide Grip)", "category": "Back"}, {"name": "Lat Pulls", "category": "Back"}, {"name": "Lateral Fly Machine", "category": "Shoulders"}, {"name": "Lateral Hops", "category": "Full Body"}, {"name": "Lateral Hurdle Hops", "category": "Legs"}, {"name": "Lateral Jumps", "category": "Legs"}, {"name": "Lateral Jumps to Sprint", "category": "Legs"}, {"name": "Lateral Leg Lift", "category": "Legs"}, {"name": "Lateral Lunge (Single Arm)", "category": "Legs"}, {"name": "Lateral Lunge to Deadlift", "category": "Legs"}, {"name": "Lateral Lunge to Upright Row", "category": "Full Body"}, {"name": "Lateral Pull (Cable)", "category": "Back"}, {"name": "Lateral Raise (Cable)", "category": "Shoulders"}, {"name": "Lateral Raise (Dumbbell)", "category": "Shoulders"}, {"name": "Lateral Raise Machine", "category": "Shoulders"}, {"name": "Lateral Raise to Upright Right", "category": "Full Body"}, {"name": "Lateral Shift (Low)", "category": "Legs"}, {"name": "Lateral Shift Swing", "category": "Legs"}, {"name": "Lateral Step Up", "category": "Legs"}, {"name": "Laying Dumbbell Tricep Extension", "category": "Triceps"}, {"name": "Laying Hamstring Curl", "category": "Legs"}, {"name": "Leg Curl (Lying)", "category": "Legs"}, {"name": "Leg Curl (Seated)", "category": "Legs"}, {"name": "Leg Extension", "category": "Legs"}, {"name": "Leg Lifts", "category": "Legs"}, {"name": "Leg Overs", "category": "Legs"}, {"name": "Leg Press", "category": "Legs"}, {"name": "Low Foot Placement Leg Press", "category": "Legs"}, {"name": "Low Plank", "category": "Core"}, {"name": "Low Row (Single Arm)", "category": "Back"}, {"name": "Low Row Easy Bar", "category": "Back"}, {"name": "Lunges (Dumbbell)", "category": "Legs"}, {"name": "Lying Leg Raise", "category": "Core"}, {"name": "Machine Alternating Shoulder Press", "category": "Shoulders"}, {"name": "Machine Hip Thrust", "category": "Legs"}, {"name": "Machine Row", "category": "Back"}, {"name": "Machine Shoulder Press", "category": "Shoulders"}, {"name": "Med Ball High Kness", "category": "Core"}, {"name": "Military Press (Seated)", "category": "Shoulders"}, {"name": "Mountain Climbers", "category": "Core"}, {"name": "Netrual Grip Push Press", "category": "Full Body"}, {"name": "Netrual Grip Shoulder Press", "category": "Shoulders"}, {"name": "Netural Grip Thruster", "category": "Full Body"}, {"name": "Neutral Grip Thurster", "category": "Full Body"}, {"name": "Oblique High Knee", "category": "Core"}, {"name": "Oblique Knee Tucks", "category": "Core"}, {"name": "Offset Squat", "category": "Legs"}, {"name": "Overhead High Knee", "category": "Core"}, {"name": "Overhead Press (Barbell)", "category": "Shoulders"}, {"name": "Overhead Single Arm Tricep Ext. (Cable)", "category": "Biceps"}, {"name": "Overhead Tricep Dumbbell Extension", "category": "Biceps"}, {"name": "Overhead Tricep Extension (Cable)", "category": "Biceps"}, {"name": "Pallof Press", "category": "Core"}, {"name": "Pec Deck (Machine)", "category": "Chest"}, {"name": "Pendulum Squat", "category": "Legs"}, {"name": "Plank", "category": "Core"}, {"name": "Preacher Curl", "category": "Biceps"}, {"name": "Preacher Curl Machine", "category": "Biceps"}, {"name": "Pull Through Bicep Curl (Cable)", "category": "Biceps"}, {"name": "Pull Ups", "category": "Back"}, {"name": "Pulsating Split Squat", "category": "Legs"}, {"name": "Push Press", "category": "Shoulders"}, {"name": "Push Ups", "category": "Chest"}, {"name": "Quad Focused Sissy Smith Squats", "category": "Legs"}, {"name": "Rack Pulls", "category": "Back"}, {"name": "Ramp Squat", "category": "Legs"}, {"name": "Rear Delt Fly (Dumbbell)", "category": "Shoulders"}, {"name": "Rear Delt Fly (Machine)", "category": "Shoulders"}, {"name": "Renagade Row", "category": "Full Body"}, {"name": "Reverse Bicep Curl", "category": "Biceps"}, {"name": "Reverse Bicep Curl (Cable)", "category": "Biceps"}, {"name": "Reverse Curl (Bar Cable)", "category": "Biceps"}, {"name": "Reverse Fly Machine", "category": "Back"}, {"name": "Reverse Grip Barbell Row", "category": "Back"}, {"name": "Reverse Grip Bent Over Row", "category": "Back"}, {"name": "Reverse Grip Cable Easy Bar Curl", "category": "Biceps"}, {"name": "Reverse Grip Cable Straight Bar", "category": "Biceps"}, {"name": "Reverse Grip Dumbbell Chest Press", "category": "Chest"}, {"name": "Reverse Grip Easy Bar Low Row", "category": "Back"}, {"name": "Reverse Grip Incline Dumbbell Chest Press", "category": "Chest"}, {"name": "Reverse Grip Lat Pulldown", "category": "Back"}, {"name": "Reverse Grip Lat Pulldown Machine", "category": "Back"}, {"name": "Reverse Grip Lateral Raise", "category": "Shoulders"}, {"name": "Reverse Grip Low Row", "category": "Back"}, {"name": "Reverse Grip Single Arm Tricep Pulldown (Cable)", "category": "Biceps"}, {"name": "Reverse Grip Spilt Stance Single Arm Low Row", "category": "Back"}, {"name": "Reverse Grip Tricep Pulldown", "category": "Biceps"}, {"name": "Reverse Grip Tricep Pushdown", "category": "Biceps"}, {"name": "Romanian Deadlift (Barbell)", "category": "Back"}, {"name": "Rope Hammer Curl", "category": "Biceps"}, {"name": "Rowing Machine", "category": "Cardio"}, {"name": "Russian Twist", "category": "Core"}, {"name": "S/A DB Thurster", "category": "Full Body"}, {"name": "Scaption Raise", "category": "Shoulders"}, {"name": "Seated Alternating Shoulder Press", "category": "Shoulders"}, {"name": "Seated Arnold Press", "category": "Shoulders"}, {"name": "Seated Bicep Curl", "category": "Biceps"}, {"name": "Seated Cable Row", "category": "Back"}, {"name": "Seated Calf Raise", "category": "Legs"}, {"name": "Seated Leg Curl", "category": "Legs"}, {"name": "Seated Leg Press", "category": "Legs"}, {"name": "Seated Netural Grip Shoulder Press", "category": "Shoulders"}, {"name": "Seated Overhead Dumbbell Tricep Extension", "category": "Biceps"}, {"name": "Seated Shoulder Press", "category": "Shoulders"}, {"name": "Seated Shoulder Press (Single Arm)", "category": "Shoulders"}, {"name": "Seated Shoulder Press Machine", "category": "Shoulders"}, {"name": "Seated Single Arm Shoulder Press", "category": "Shoulders"}, {"name": "Seated Single Leg Leg Curl", "category": "Legs"}, {"name": "Seated Static Arnold Press", "category": "Shoulders"}, {"name": "Seated low row", "category": "Full Body"}, {"name": "Shoulder Cable Cross", "category": "Shoulders"}, {"name": "Shoulder Extension Bicep Curl", "category": "Biceps"}, {"name": "Shoulder Press (Standing DB)", "category": "Shoulders"}, {"name": "Shrugs (Barbell)", "category": "Back"}, {"name": "Shrugs (Dumbbell)", "category": "Back"}, {"name": "Shrugs on Machine", "category": "Shoulders"}, {"name": "Side Plank", "category": "Core"}, {"name": "Single Arm 1/2 Step Up", "category": "Legs"}, {"name": "Single Arm Bicep Curl (Cable)", "category": "Biceps"}, {"name": "Single Arm Bosu Squat", "category": "Legs"}, {"name": "Single Arm Bulgarian Squat", "category": "Legs"}, {"name": "Single Arm Bulgarian Squat (Bosu)", "category": "Legs"}, {"name": "Single Arm Cable Bicep Curl", "category": "Biceps"}, {"name": "Single Arm Cable Front Raises", "category": "Shoulders"}, {"name": "Single Arm Chest Press", "category": "Chest"}, {"name": "Single Arm Cross Body Cable Chest Flys", "category": "Chest"}, {"name": "Single Arm DB Kickback", "category": "Biceps"}, {"name": "Single Arm Deadlift", "category": "Legs"}, {"name": "Single Arm Dumbbell Chest Press", "category": "Chest"}, {"name": "Single Arm Dumbbell Deadlift", "category": "Legs"}, {"name": "Single Arm Dumbbell Kickback", "category": "Biceps"}, {"name": "Single Arm Dumbbell Row", "category": "Back"}, {"name": "Single Arm Dumbbell Squat", "category": "Legs"}, {"name": "Single Arm Farmers Carry", "category": "Core"}, {"name": "Single Arm Front Loaded Cross Back Lunge", "category": "Legs"}, {"name": "Single Arm Front Loaded Lateral Lunge", "category": "Legs"}, {"name": "Single Arm Gorilla Row", "category": "Back"}, {"name": "Single Arm Imcline Chest Press", "category": "Chest"}, {"name": "Single Arm Incline Chest Press", "category": "Chest"}, {"name": "Single Arm Kettlebell Row", "category": "Back"}, {"name": "Single Arm Landmine Press", "category": "Shoulders"}, {"name": "Single Arm Lat Pulldown", "category": "Back"}, {"name": "Single Arm Lateral Lunge", "category": "Legs"}, {"name": "Single Arm Lateral Shift", "category": "Legs"}, {"name": "Single Arm Low Row (Bench)", "category": "Back"}, {"name": "Single Arm Reverse Lunge", "category": "Legs"}, {"name": "Single Arm Reverse Tricep Extension", "category": "Biceps"}, {"name": "Single Arm Row (Dumbbell)", "category": "Back"}, {"name": "Single Arm Row (Kettle Bell)", "category": "Back"}, {"name": "Single Arm Shoulder Press", "category": "Shoulders"}, {"name": "Single Arm Single Leg Bosu Squat", "category": "Legs"}, {"name": "Single Arm Spilt Squat", "category": "Legs"}, {"name": "Single Arm Spilt Stance Deadlift", "category": "Legs"}, {"name": "Single Arm Squat", "category": "Legs"}, {"name": "Single Arm Squat (Ramp)", "category": "Legs"}, {"name": "Single Arm Squat to Press", "category": "Full Body"}, {"name": "Single Arm Standing Dumbbell Row", "category": "Back"}, {"name": "Single Arm Standing Shoulder Press", "category": "Shoulders"}, {"name": "Single Arm Step Down", "category": "Legs"}, {"name": "Single Arm Suitcase Squat", "category": "Legs"}, {"name": "Single Arm Switch Hip Hinge Swing", "category": "Full Body"}, {"name": "Single Arm Thruster", "category": "Full Body"}, {"name": "Single Arm Toe Deadlift", "category": "Legs"}, {"name": "Single Arm Tricep Extension (Cable)", "category": "Biceps"}, {"name": "Single Arm Tricep Pressdown", "category": "Triceps"}, {"name": "Single Chest Press", "category": "Chest"}, {"name": "Single Dumbbell Two Hand Deadlift", "category": "Legs"}, {"name": "Single Dumbbell Two Hand Squat Pause", "category": "Legs"}, {"name": "Single Kettle Bell Dead Lift", "category": "Legs"}, {"name": "Single Leg Bridge", "category": "Legs"}, {"name": "Single Leg Deadlift", "category": "Legs"}, {"name": "Single Leg Glute Bridge", "category": "Legs"}, {"name": "Single Leg Leg Extension", "category": "Legs"}, {"name": "Single Leg Leg Press", "category": "Legs"}, {"name": "Single Leg Over", "category": "Legs"}, {"name": "Sit to Stand (Body Weight)", "category": "Legs"}, {"name": "Sit to Stand to Jump (Body Weight)", "category": "Full Body"}, {"name": "Sit to Stand to Single Arm Shoulder Press", "category": "Full Body"}, {"name": "Skaters Jumps", "category": "Legs"}, {"name": "Skaters to Sprint", "category": "Legs"}, {"name": "Skull Crushers", "category": "Biceps"}, {"name": "Sled Pull", "category": "Legs"}, {"name": "Sled Push", "category": "Full Body"}, {"name": "Sled Push/Pull", "category": "Full Body"}, {"name": "Smith Box Squats", "category": "Legs"}, {"name": "Smith Flat Chest Press", "category": "Chest"}, {"name": "Smith Incline Chest Press", "category": "Chest"}, {"name": "Smith Machine Calf Raise", "category": "Legs"}, {"name": "Smith Squats", "category": "Legs"}, {"name": "Snatch (Dumbbell)", "category": "Full Body"}, {"name": "Speed Skater", "category": "Legs"}, {"name": "Spilt Squat (Body Weight)", "category": "Legs"}, {"name": "Spilt Squat (Body Young)", "category": "Legs"}, {"name": "Spilt Squat Hold", "category": "Legs"}, {"name": "Spilt Squat(Body Weight)", "category": "Legs"}, {"name": "Spilt Stance S/A Squat", "category": "Legs"}, {"name": "Spilt Stance Single Arm Deadlift", "category": "Legs"}, {"name": "Squat (Barbell)", "category": "Legs"}, {"name": "Squat Hold Band Walk", "category": "Legs"}, {"name": "Squat to Alt Upper Cut", "category": "Full Body"}, {"name": "Squat to Hammer Curl", "category": "Biceps"}, {"name": "Squat to Press", "category": "Full Body"}, {"name": "Squat to Pulsating Squat", "category": "Legs"}, {"name": "Squat to Step Up", "category": "Full Body"}, {"name": "Squats (Body Weight)", "category": "Legs"}, {"name": "Standing Arnold Press", "category": "Shoulders"}, {"name": "Standing Bicep Curl", "category": "Biceps"}, {"name": "Standing Calf Raise", "category": "Legs"}, {"name": "Standing Chest Press (Band(", "category": "Chest"}, {"name": "Standing Machine Chest Press", "category": "Chest"}, {"name": "Standing Neutral Grip Shoulder Press", "category": "Shoulders"}, {"name": "Standing Shoulder Press Machine", "category": "Shoulders"}, {"name": "Standing Shoulder Push Press (Barbell)", "category": "Full Body"}, {"name": "Standing Single Arm Shoulder Press", "category": "Shoulders"}, {"name": "Standing Stactic Single Arm Arnold Press", "category": "Shoulders"}, {"name": "Static Hold Arnold Press", "category": "Shoulders"}, {"name": "Static Hold Bicep Curl", "category": "Biceps"}, {"name": "Static Hold Chest Press Machine", "category": "Chest"}, {"name": "Static Hold Decline Press (Machine)", "category": "Chest"}, {"name": "Static Hold Hammer Curl", "category": "Biceps"}, {"name": "Static Hold Incline Chest Press", "category": "Chest"}, {"name": "Static Hold Shoulder Press", "category": "Shoulders"}, {"name": "Static Hold Shoulder Press Machine", "category": "Chest"}, {"name": "Step Down", "category": "Legs"}, {"name": "Step Up (Single Arm)", "category": "Legs"}, {"name": "Step Up to Hammer Curl", "category": "Full Body"}, {"name": "Step Up to Knee Drive", "category": "Legs"}, {"name": "Step Ups", "category": "Legs"}, {"name": "Step up Knee Drive", "category": "Full Body"}, {"name": "Stiff Leg Deadlift", "category": "Legs"}, {"name": "Straight Arm Pulldown", "category": "Back"}, {"name": "Straight Bar Ticep Ext.", "category": "Biceps"}, {"name": "Suitcase Forward Lunge", "category": "Legs"}, {"name": "Suitcase Lateral Lunge", "category": "Legs"}, {"name": "Suitcase Single Arm Sit to Stand", "category": "Full Body"}, {"name": "Suitcase Sit to Stand", "category": "Legs"}, {"name": "Suitcase Squat", "category": "Legs"}, {"name": "Suitcase Squat (Kettlebell)", "category": "Legs"}, {"name": "Suitcase Squat (Ramp)", "category": "Legs"}, {"name": "Suitcase Squat Heels Elevated", "category": "Legs"}, {"name": "Suitcase Squat Kettlebell (Band)", "category": "Legs"}, {"name": "Suitecase Band Squat (For Hips)", "category": "Legs"}, {"name": "Suitecase Single Arm Squat", "category": "Legs"}, {"name": "Suitecase Sit to Stand Single Arm", "category": "Legs"}, {"name": "Suitecase Spanish Squat", "category": "Legs"}, {"name": "Suitecase Squat", "category": "Legs"}, {"name": "Suitecase Squat to Step Up", "category": "Full Body"}, {"name": "Sumo Deadlift (Barbell)", "category": "Back"}, {"name": "Sumo Deadlift (Kettlebell)", "category": "Legs"}, {"name": "Sumo Squat", "category": "Legs"}, {"name": "Sumo Squat w/pulse", "category": "Legs"}, {"name": "Superman", "category": "Core"}, {"name": "Supine Press", "category": "Chest"}, {"name": "Supine Press (Static Hold)", "category": "Chest"}, {"name": "Svend Press", "category": "Chest"}, {"name": "Swing Lunge", "category": "Legs"}, {"name": "T-Bar Row", "category": "Back"}, {"name": "T-Bar Wide Grip Row", "category": "Back"}, {"name": "TRX Chest Press", "category": "Chest"}, {"name": "TRX High Row", "category": "Back"}, {"name": "TRX Knee Drive", "category": "Core"}, {"name": "TRX Low Plank Knee Drive", "category": "Core"}, {"name": "TRX Low Row", "category": "Back"}, {"name": "TRX Reverse Lunge", "category": "Legs"}, {"name": "TRX Rollout", "category": "Back"}, {"name": "TRX Single Leg Deadlift", "category": "Legs"}, {"name": "TRX Squat", "category": "Legs"}, {"name": "TRX Tricep Extension", "category": "Biceps"}, {"name": "TRX Y Raise", "category": "Shoulders"}, {"name": "Tire Flips", "category": "Full Body"}, {"name": "Torso Rotation", "category": "Core"}, {"name": "Torso Rotation (Cable)", "category": "Core"}, {"name": "Trap Bar Jump", "category": "Legs"}, {"name": "Triangle Bar Tricep Pushdown", "category": "Biceps"}, {"name": "Triangle Lat Pulldown", "category": "Back"}, {"name": "Tricep Cable Rope Pushdown", "category": "Biceps"}, {"name": "Tricep Dip Machine", "category": "Biceps"}, {"name": "Tricep Extension Bar Cable", "category": "Biceps"}, {"name": "Tricep Kickback (Cable)", "category": "Biceps"}, {"name": "Tricep Kickbacks", "category": "Biceps"}, {"name": "Tricep Overhead Extension", "category": "Biceps"}, {"name": "Tricep Press", "category": "Biceps"}, {"name": "Tricep Pushdown (Cable)", "category": "Biceps"}, {"name": "Tricep Pushdown (Triangle Bar)", "category": "Biceps"}, {"name": "Tricep Pushdown Machine", "category": "Biceps"}, {"name": "Tricep Single Arm Overhead Extension", "category": "Triceps"}, {"name": "Tricep Straight Bar Pressdown", "category": "Triceps"}, {"name": "Trx Deadlift", "category": "Legs"}, {"name": "Two Hand One Dumbbell Squat", "category": "Legs"}, {"name": "Uneven Single Arm Squat", "category": "Legs"}, {"name": "Upper Cut", "category": "Shoulders"}, {"name": "Upright Row (Barbell)", "category": "Shoulders"}, {"name": "Upright Row (Easy Bar)", "category": "Shoulders"}, {"name": "Upright Single Arm Tricep Extension", "category": "Biceps"}, {"name": "V-Ups", "category": "Core"}, {"name": "Viking Press", "category": "Shoulders"}, {"name": "Waiter Dumbbell Curls", "category": "Biceps"}, {"name": "Walking Lunges", "category": "Legs"}, {"name": "Weighted High Knees", "category": "Core"}, {"name": "Weighted Push Ups", "category": "Chest"}, {"name": "Wide Grip Cable Row", "category": "Back"}, {"name": "Zotman Curls", "category": "Biceps"}];
 
@@ -1403,6 +1440,177 @@ function addDPExercise() {
   renderDPExList();
 }
 
+// ── MEAL PLAN MODULE ──
+var mealPlanMeals = [];
+var editingMealPlanIndex = null;
+var mealPlanCurrentDate = null;
+
+function resetMealPlanForm() {
+  document.getElementById("mp_name").value = "";
+  document.getElementById("mp_time").value = "Breakfast";
+  document.getElementById("mp_cal").value = "";
+  document.getElementById("mp_pro").value = "";
+  document.getElementById("mp_carb").value = "";
+  document.getElementById("mp_fat").value = "";
+  document.getElementById("mp_fiber").value = "";
+  document.getElementById("mp_serving").value = "";
+  editingMealPlanIndex = null;
+  document.getElementById("mealPlanAddBtn").textContent = "+ Add Meal";
+  document.getElementById("mealPlanCancelEditWrap").style.display = "none";
+}
+
+function cancelMealPlanEdit() { resetMealPlanForm(); }
+
+function editMealPlanMeal(idx) {
+  var m = mealPlanMeals[idx];
+  if(!m) return;
+  document.getElementById("mp_name").value = m.name;
+  document.getElementById("mp_time").value = m.meal_time || "Breakfast";
+  document.getElementById("mp_cal").value = m.calories || "";
+  document.getElementById("mp_pro").value = m.protein_g || "";
+  document.getElementById("mp_carb").value = m.carbs_g || "";
+  document.getElementById("mp_fat").value = m.fat_g || "";
+  document.getElementById("mp_fiber").value = m.fiber_g || "";
+  document.getElementById("mp_serving").value = m.serving_note || "";
+  editingMealPlanIndex = idx;
+  document.getElementById("mealPlanAddBtn").textContent = "Update Meal";
+  document.getElementById("mealPlanCancelEditWrap").style.display = "block";
+}
+
+function removeMealPlanMeal(idx) {
+  mealPlanMeals.splice(idx, 1);
+  renderMealPlanList();
+}
+
+function addMealPlanMeal() {
+  var name = document.getElementById("mp_name").value.trim();
+  if(!name) { showToast("Name this meal"); return; }
+  var meal = {
+    id: (editingMealPlanIndex !== null && mealPlanMeals[editingMealPlanIndex]) ? mealPlanMeals[editingMealPlanIndex].id : (Date.now().toString(36)+Math.random().toString(36).slice(2,6)),
+    name: name,
+    meal_time: document.getElementById("mp_time").value,
+    calories: +document.getElementById("mp_cal").value || 0,
+    protein_g: +document.getElementById("mp_pro").value || 0,
+    carbs_g: +document.getElementById("mp_carb").value || 0,
+    fat_g: +document.getElementById("mp_fat").value || 0,
+    fiber_g: +document.getElementById("mp_fiber").value || 0,
+    serving_note: document.getElementById("mp_serving").value.trim() || ""
+  };
+  if(editingMealPlanIndex !== null) {
+    mealPlanMeals[editingMealPlanIndex] = meal;
+  } else {
+    mealPlanMeals.push(meal);
+  }
+  resetMealPlanForm();
+  renderMealPlanList();
+}
+
+function renderMealPlanList() {
+  var el = document.getElementById("mealPlanList");
+  if(!el) return;
+  if(!mealPlanMeals.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:12px;font-style:italic">No meals added yet</div>';
+    return;
+  }
+  var html = "";
+  mealPlanMeals.forEach(function(m, idx){
+    html += '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:7px;padding:9px 12px;margin-bottom:6px;cursor:pointer" onclick="editMealPlanMeal('+idx+')">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px;font-weight:600">'+esc(m.name)+'</span>';
+    html += '<div style="display:flex;align-items:center;gap:6px"><span style="font-size:9px;color:var(--teal2);background:var(--teal3);border-radius:3px;padding:1px 6px">'+esc(m.meal_time)+'</span>';
+    html += '<button onclick="event.stopPropagation();removeMealPlanMeal('+idx+')" style="background:transparent;border:none;color:var(--red);font-size:14px;cursor:pointer;padding:0 4px">✕</button></div></div>';
+    html += '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+m.calories+' cal · '+m.protein_g+'p / '+m.carbs_g+'c / '+m.fat_g+'f'+(m.serving_note?' · '+esc(m.serving_note):'')+'</div>';
+    html += '</div>';
+  });
+  el.innerHTML = html;
+}
+
+function openMealPlanBuilder(date) {
+  mealPlanCurrentDate = date;
+  var existing = state.mealPlans && state.mealPlans.find(function(p){ return p.date === date; });
+  mealPlanMeals = existing ? JSON.parse(JSON.stringify(existing.meals || [])) : [];
+  document.getElementById("mealPlanDateLabel").textContent = date;
+  document.getElementById("mealPlanAIStatus").style.display = "none";
+  resetMealPlanForm();
+  renderMealPlanList();
+  var foodListEl = document.getElementById("mealPlanFoodList");
+  if(foodListEl) foodListEl.innerHTML = (state.foodLibrary||[]).map(function(f){ return '<option value="'+esc(f.name)+'">'; }).join("");
+  openSheet("mealPlanSheet");
+}
+
+async function saveMealPlan() {
+  if(!state.activeId) return;
+  if(!mealPlanMeals.length) { showToast("Add at least one meal first"); return; }
+  try {
+    var existing = state.mealPlans && state.mealPlans.find(function(p){ return p.date === mealPlanCurrentDate; });
+    var payload = { client_id: state.activeId, date: mealPlanCurrentDate, meals: mealPlanMeals };
+    var saved;
+    if(existing) {
+      saved = await api("meal_plans?id=eq."+existing.id, { method:"PATCH", body: JSON.stringify(payload) });
+      var idx = state.mealPlans.findIndex(function(p){ return p.id === existing.id; });
+      if(idx > -1 && saved && saved[0]) state.mealPlans[idx] = saved[0];
+    } else {
+      saved = await api("meal_plans", { method:"POST", body: JSON.stringify(payload) });
+      if(saved && saved[0]) { if(!state.mealPlans) state.mealPlans = []; state.mealPlans.push(saved[0]); }
+    }
+    closeSheet("mealPlanSheet");
+    showToast("Meal plan saved ✓");
+    renderMain();
+  } catch(e) { showToast("Could not save: " + e.message); }
+}
+
+async function deleteMealPlan(id) {
+  if(!confirm("Delete this meal plan?")) return;
+  try {
+    await api("meal_plans?id=eq."+id, { method:"DELETE" });
+    state.mealPlans = (state.mealPlans||[]).filter(function(p){ return p.id !== id; });
+    showToast("Meal plan removed");
+    renderMain();
+  } catch(e) { showToast("Could not delete"); }
+}
+
+var FULL_DAY_MEAL_PROMPT = function(goals, existingNames) {
+  return "You are a precise sports nutrition expert building a full day of meals for a client, targeting these daily totals: "
+    + goals.calories + " calories, " + goals.protein + "g protein, " + goals.carbs + "g carbs, " + goals.fat + "g fat.\n\n"
+    + "Design a realistic, practical full day of meals (Breakfast, Lunch, Dinner, and 1-2 snacks as needed) using whole, commonly available foods that together hit these targets as closely as possible. "
+    + (existingNames && existingNames.length ? "Avoid repeating meals already in the plan: " + existingNames.join(", ") + ".\n\n" : "\n")
+    + "Return ONLY a JSON array with no markdown, no preamble, in this exact shape:\n"
+    + '[{"name":"short clean meal name","meal_time":"Breakfast|Morning Snack|Lunch|Afternoon Snack|Dinner|Evening Snack","calories":number,"protein_g":number,"carbs_g":number,"fat_g":number,"fiber_g":number,"serving_note":"brief portion description"}]'
+    + "\n\nBe accurate with standard food database values. Round to nearest whole number.";
+};
+
+async function suggestFullDayMeals() {
+  var a = getActive();
+  if(!a) return;
+  var btn = document.getElementById("mealPlanAISuggestBtn");
+  var statusEl = document.getElementById("mealPlanAIStatus");
+  if(btn) { btn.disabled = true; btn.textContent = "Generating…"; }
+  if(statusEl) statusEl.style.display = "block";
+  try {
+    var goals = { calories: a.calories || 2000, protein: a.protein || 150, carbs: a.carbs || 200, fat: a.fat || 60 };
+    var existingNames = mealPlanMeals.map(function(m){ return m.name; });
+    var res = await fetch(NUTRITION_PROXY_URL, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1200,
+        messages: [{ role: "user", content: FULL_DAY_MEAL_PROMPT(goals, existingNames) }] })
+    });
+    var data = await res.json();
+    var raw = (data.content && data.content[0] && data.content[0].text) || "[]";
+    var suggested = JSON.parse(raw.replace(/```json|```/g, "").trim());
+    suggested.forEach(function(m){
+      mealPlanMeals.push({
+        id: Date.now().toString(36)+Math.random().toString(36).slice(2,6),
+        name: m.name, meal_time: m.meal_time || "Breakfast",
+        calories: m.calories||0, protein_g: m.protein_g||0, carbs_g: m.carbs_g||0, fat_g: m.fat_g||0, fiber_g: m.fiber_g||0,
+        serving_note: m.serving_note || ""
+      });
+    });
+    renderMealPlanList();
+    showToast("Added "+suggested.length+" suggested meals — review before saving");
+  } catch(e) { showToast("Could not generate suggestions"); }
+  if(btn) { btn.disabled = false; btn.textContent = "🤖 AI Suggest Full Day"; }
+  if(statusEl) statusEl.style.display = "none";
+}
+
 function openDatedPlan(existingId) {
   var existing = existingId ? state.datedPlans.find(function(p){return p.id===existingId;}) : null;
   document.getElementById("dp_id").value = existingId || "";
@@ -1644,6 +1852,25 @@ function renderTrainerCal() {
     } else {
       html += '<button onclick="openDatedPlan(null)" style="width:100%;background:linear-gradient(135deg,#186476,var(--teal));color:white;border:none;border-radius:8px;padding:12px;font-family:Barlow Condensed;font-size:13px;font-weight:800;letter-spacing:1px;text-transform:uppercase;cursor:pointer">+ Assign Workout</button>';
     }
+    var existingMealPlan = state.mealPlans && state.mealPlans.find(function(p){return p.date===state.selCalDate;});
+    html += '<div style="margin-top:14px;border-top:1px solid var(--b1);padding-top:14px">';
+    html += '<div style="font-family:Barlow Condensed;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--teal2);text-transform:uppercase;margin-bottom:10px">🍽️ Meal Plan</div>';
+    if(existingMealPlan && existingMealPlan.meals && existingMealPlan.meals.length) {
+      existingMealPlan.meals.forEach(function(meal){
+        html += '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:7px;padding:9px 12px;margin-bottom:6px">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px;font-weight:600">'+esc(meal.name)+'</span>';
+        html += '<span style="font-size:9px;color:var(--teal2);background:var(--teal3);border-radius:3px;padding:1px 6px">'+esc(meal.meal_time||"")+'</span></div>';
+        html += '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+meal.calories+' cal · '+meal.protein_g+'p / '+meal.carbs_g+'c / '+meal.fat_g+'f'+(meal.serving_note?' · '+esc(meal.serving_note):'')+'</div>';
+        html += '</div>';
+      });
+      html += '<div style="display:flex;gap:8px;margin-top:6px">';
+      html += '<button onclick="openMealPlanBuilder(\''+state.selCalDate+'\')" style="flex:1;background:var(--teal3);border:1px solid var(--teal);color:var(--teal2);border-radius:7px;padding:9px;font-family:Barlow Condensed;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:1px;text-transform:uppercase">Edit</button>';
+      html += '<button onclick="deleteMealPlan(\''+existingMealPlan.id+'\')" style="background:rgba(224,82,82,0.1);border:1px solid rgba(224,82,82,0.25);color:var(--red);border-radius:7px;padding:9px 14px;font-family:Barlow Condensed;font-size:12px;font-weight:700;cursor:pointer">✕</button>';
+      html += '</div>';
+    } else {
+      html += '<button onclick="openMealPlanBuilder(\''+state.selCalDate+'\')" style="width:100%;background:linear-gradient(135deg,#186476,var(--teal));color:white;border:none;border-radius:8px;padding:12px;font-family:Barlow Condensed;font-size:13px;font-weight:800;letter-spacing:1px;text-transform:uppercase;cursor:pointer">+ Build Meal Plan</button>';
+    }
+    html += '</div>';
     html += '</div>';
   }
 
@@ -2814,11 +3041,12 @@ async function loadClientData(id) {
       api("progress_photos?client_id=eq."+id+"&order=date.desc"),
       api("water_logs?client_id=eq."+id),
       api("daily_checkins?client_id=eq."+id+"&order=date.desc&limit=14"),
-      api("optional_workouts?client_id=eq."+id+"&order=created_at.desc")
+      api("optional_workouts?client_id=eq."+id+"&order=created_at.desc"),
+      api("meal_plans?client_id=eq."+id+"&order=date.asc")
     ]);
     state.cLogs = results[0]; state.cProg = results[1]; state.cPlans = results[2]; state.datedPlans = results[3]||[]; state.nLogs = results[4]||[];
     state.habits = results[5]||[]; state.habitLogs = results[6]||[]; state.progressPhotos = results[7]||[]; state.waterLogs = results[8]||[];
-    state.dailyCheckins = results[9]||[]; state.optionalWorkouts = results[10]||[];
+    state.dailyCheckins = results[9]||[]; state.optionalWorkouts = results[10]||[]; state.mealPlans = results[11]||[];
     resolveProgressPhotoUrls().then(function(){ if(state.view === "progress") renderMain(); });
   } catch(e) { showToast("Error loading data"); }
 }
