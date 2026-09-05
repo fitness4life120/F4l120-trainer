@@ -113,6 +113,7 @@ body{font-family:'Barlow',sans-serif;color:var(--txt)}
 .prog-outer{background:var(--b1);border-radius:4px;height:8px;overflow:hidden;margin:10px 0}
 .prog-inner{height:100%;background:linear-gradient(90deg,var(--teal),var(--teal2));border-radius:4px;transition:width 0.3s}
 .prow{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--b1)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -3657,27 +3658,38 @@ async function markThreadReadByTrainer(clientId) {
 
 function setComposeType(t) { state.composeType = t; renderMain(); }
 
-async function sendComposeMessage() {
-  var bodyEl = document.getElementById("composeBody");
-  var body = bodyEl ? bodyEl.value.trim() : "";
-  if(!body) { showToast("Write a message first"); return; }
+function getBroadcastTargets() {
   var targets = [];
   var label = null;
   if(state.composeType === "individual") {
     var cid = document.getElementById("composeClient").value;
-    if(!cid) { showToast("Pick a client"); return; }
-    targets = [cid];
+    if(cid) targets = [cid];
   } else if(state.composeType === "all") {
-    targets = state.clients.map(function(c){ return c.id; });
+    targets = state.clients.filter(function(c){ return c.active !== false; }).map(function(c){ return c.id; });
     label = "All Clients";
   } else if(state.composeType === "group") {
     var gid = document.getElementById("composeGroup").value;
-    if(!gid) { showToast("Pick a group"); return; }
-    targets = getGroupMembers(gid);
-    var g = state.groups.find(function(g){ return g.id === gid; });
-    label = g ? g.name : "Group";
+    if(gid) {
+      targets = getGroupMembers(gid).filter(function(cid){
+        var c = state.clients.find(function(cc){ return cc.id === cid; });
+        return c && c.active !== false;
+      });
+      var g = state.groups.find(function(g){ return g.id === gid; });
+      label = g ? g.name : "Group";
+    }
   }
-  if(!targets.length) { showToast("No recipients found"); return; }
+  return { targets: targets, label: label };
+}
+
+async function sendComposeMessage() {
+  var bodyEl = document.getElementById("composeBody");
+  var body = bodyEl ? bodyEl.value.trim() : "";
+  if(!body) { showToast("Write a message first"); return; }
+  var t = getBroadcastTargets();
+  var targets = t.targets, label = t.label;
+  if(state.composeType === "individual" && !targets.length) { showToast("Pick a client"); return; }
+  if(state.composeType === "group" && !targets.length) { showToast("Pick a group"); return; }
+  if(!targets.length) { showToast("No active recipients found"); return; }
   var isBroadcast = targets.length > 1;
   var broadcastId = isBroadcast ? uuidv4() : null;
   var rows = targets.map(function(cid){
@@ -3692,6 +3704,139 @@ async function sendComposeMessage() {
     var pushTitle = isBroadcast ? "New message from Coach Steve ("+label+")" : "New message from Coach Steve";
     sendPushToClients(targets, pushTitle, body);
   } catch(e) { showToast("Could not send message"); }
+}
+
+function stopAndSendTrainerBroadcastRecording() {
+  if(!trainerMediaRecorder) return;
+  var recorder = trainerMediaRecorder;
+  var duration = trainerRecordSeconds;
+  var t = getBroadcastTargets();
+  var targets = t.targets, label = t.label;
+  if(!targets.length) { showToast("No active recipients found"); cancelTrainerRecording(); return; }
+  recorder.onstop = async function() {
+    recorder.stream.getTracks().forEach(function(tr){ tr.stop(); });
+    clearInterval(trainerRecordTimer);
+    trainerRecording = false;
+    trainerRecordSeconds = 0;
+    var blob = new Blob(trainerAudioChunks, {type: recorder.mimeType});
+    trainerAudioChunks = [];
+    if(blob.size < 500) { showToast("Recording too short"); renderMain(); return; }
+    trainerUploadingVoice = true;
+    renderMain();
+    try {
+      var ext = recorder.mimeType.indexOf("mp4") > -1 ? "m4a" : "webm";
+      var path = "broadcast/" + Date.now() + "." + ext;
+      var res = await fetch(SUPA + "/storage/v1/object/voice-messages/" + path, {
+        method: "POST",
+        headers: { "apikey": KEY, "Authorization": "Bearer " + KEY, "Content-Type": blob.type },
+        body: blob
+      });
+      if(!res.ok) throw new Error("Upload failed");
+      var isBroadcast = targets.length > 1;
+      var broadcastId = isBroadcast ? uuidv4() : null;
+      var rows = targets.map(function(cid){
+        return { thread_client_id: cid, sender: "trainer", audio_path: path, audio_duration: duration, broadcast_id: broadcastId, broadcast_label: isBroadcast ? label : null };
+      });
+      var saved = await api("messages", { method:"POST", body: JSON.stringify(rows) });
+      state.messages = state.messages.concat(saved||[]);
+      showToast("Sent to "+targets.length+" client"+(targets.length!==1?"s":""));
+      state.msgView = "inbox";
+      var pushTitle = isBroadcast ? "New voice message from Coach Steve ("+label+")" : "New voice message from Coach Steve";
+      sendPushToClients(targets, pushTitle, "🎤 Voice message");
+    } catch(e) { showToast("Could not send voice message"); }
+    trainerUploadingVoice = false;
+    renderMain();
+  };
+  recorder.stop();
+}
+
+var trainerMediaRecorder = null;
+var trainerAudioChunks = [];
+var trainerRecording = false;
+var trainerRecordSeconds = 0;
+var trainerRecordTimer = null;
+var trainerUploadingVoice = false;
+
+async function startTrainerRecording() {
+  try {
+    var stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    var mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
+    var recorder = new MediaRecorder(stream, {mimeType: mimeType});
+    trainerAudioChunks = [];
+    recorder.ondataavailable = function(e){ if(e.data.size>0) trainerAudioChunks.push(e.data); };
+    recorder.start();
+    trainerMediaRecorder = recorder;
+    trainerRecording = true;
+    trainerRecordSeconds = 0;
+    trainerRecordTimer = setInterval(function(){ trainerRecordSeconds++; renderMain(); }, 1000);
+    renderMain();
+  } catch(e) { showToast("Could not access microphone"); }
+}
+
+function cancelTrainerRecording() {
+  if(trainerMediaRecorder && trainerMediaRecorder.state !== "inactive") {
+    trainerMediaRecorder.stream.getTracks().forEach(function(t){ t.stop(); });
+    trainerMediaRecorder.stop();
+  }
+  clearInterval(trainerRecordTimer);
+  trainerRecording = false;
+  trainerRecordSeconds = 0;
+  trainerAudioChunks = [];
+  renderMain();
+}
+
+function stopAndSendTrainerRecording() {
+  if(!trainerMediaRecorder) return;
+  var recorder = trainerMediaRecorder;
+  var duration = trainerRecordSeconds;
+  var clientId = state.msgThreadClientId;
+  recorder.onstop = async function() {
+    recorder.stream.getTracks().forEach(function(t){ t.stop(); });
+    clearInterval(trainerRecordTimer);
+    trainerRecording = false;
+    trainerRecordSeconds = 0;
+    var blob = new Blob(trainerAudioChunks, {type: recorder.mimeType});
+    trainerAudioChunks = [];
+    if(blob.size < 500) { showToast("Recording too short"); renderMain(); return; }
+    trainerUploadingVoice = true;
+    renderMain();
+    try {
+      var ext = recorder.mimeType.indexOf("mp4") > -1 ? "m4a" : "webm";
+      var path = clientId + "/" + Date.now() + "." + ext;
+      var res = await fetch(SUPA + "/storage/v1/object/voice-messages/" + path, {
+        method: "POST",
+        headers: { "apikey": KEY, "Authorization": "Bearer " + KEY, "Content-Type": blob.type },
+        body: blob
+      });
+      if(!res.ok) throw new Error("Upload failed");
+      var saved = await api("messages", { method:"POST", body: JSON.stringify({ thread_client_id: clientId, sender:"trainer", audio_path: path, audio_duration: duration }) });
+      if(saved && saved[0]) state.messages.push(saved[0]);
+      sendPushToClients([clientId], "New voice message from Coach Steve", "🎤 Voice message");
+    } catch(e) { showToast("Could not send voice message"); }
+    trainerUploadingVoice = false;
+    renderMain();
+  };
+  recorder.stop();
+}
+
+async function playTrainerVoiceMessage(audioPath, btnId) {
+  var btn = document.getElementById(btnId);
+  if(btn) { btn.textContent = "Loading…"; btn.disabled = true; }
+  try {
+    var res = await fetch(SUPA + "/storage/v1/object/sign/voice-messages/" + audioPath, {
+      method: "POST",
+      headers: { "apikey": KEY, "Authorization": "Bearer " + KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({ expiresIn: 3600 })
+    });
+    var data = await res.json();
+    if(data.signedURL) {
+      var audio = new Audio(SUPA + "/storage/v1" + data.signedURL);
+      audio.play();
+      if(btn) { btn.textContent = "▶ Playing…"; btn.disabled = false; }
+    } else if(btn) { btn.textContent = "▶ Play"; btn.disabled = false; }
+  } catch(e) {
+    if(btn) { btn.textContent = "▶ Play"; btn.disabled = false; }
+  }
 }
 
 async function sendThreadReply() {
@@ -3711,9 +3856,15 @@ function backToInbox() { state.msgView = "inbox"; state.msgThreadClientId = null
 async function deleteMessageById(id) {
   if(!confirm("Delete this message?")) return;
   try {
+    var msg = state.messages.find(function(m){ return m.id === id; });
     await api("messages?id=eq."+id, { method:"DELETE" });
     state.messages = state.messages.filter(function(m){ return m.id !== id; });
     renderMain();
+    if(msg && msg.audio_path) {
+      fetch(SUPA + "/storage/v1/object/voice-messages/" + msg.audio_path, {
+        method: "DELETE", headers: { "apikey": KEY, "Authorization": "Bearer " + KEY }
+      }).catch(function(){});
+    }
   } catch(e) { showToast("Could not delete message"); }
 }
 
@@ -3800,7 +3951,7 @@ function renderMsgInbox() {
     return html;
   }
   threads.forEach(function(t){
-    var preview = t.lastMsg.body.length > 60 ? t.lastMsg.body.slice(0,60)+"…" : t.lastMsg.body;
+    var preview = t.lastMsg.audio_path ? "🎤 Voice message" : (t.lastMsg.body && t.lastMsg.body.length > 60 ? t.lastMsg.body.slice(0,60)+"…" : (t.lastMsg.body||""));
     var fromLabel = t.lastMsg.sender === "trainer" ? "You: " : "";
     html += '<div onclick="openThread(\''+t.clientId+'\')" style="background:var(--s1);border:1px solid var(--b1);border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px">';
     html += '<div style="flex:1;min-width:0">';
@@ -3829,15 +3980,38 @@ function renderMsgThread() {
     var isTrainer = m.sender === "trainer";
     html += '<div style="align-self:'+(isTrainer?"flex-end":"flex-start")+';max-width:80%">';
     if(m.broadcast_label) html += '<div style="font-size:9px;color:var(--gold);margin-bottom:2px;text-align:'+(isTrainer?"right":"left")+'">Sent to: '+esc(m.broadcast_label)+'</div>';
-    html += '<div style="background:'+(isTrainer?"linear-gradient(135deg,#186476,var(--teal))":"var(--s1)")+';color:'+(isTrainer?"#fff":"var(--txt)")+';border:1px solid '+(isTrainer?"transparent":"var(--b1)")+';border-radius:12px;padding:9px 13px;font-size:13px;line-height:1.4">'+esc(m.body).replace(/\n/g,"<br>")+'</div>';
+    if(m.audio_path) {
+      var btnId = "voicebtn_"+m.id;
+      var durLabel = m.audio_duration ? Math.floor(m.audio_duration/60)+":"+String(m.audio_duration%60).padStart(2,"0") : "";
+      html += '<div style="display:flex;align-items:center;gap:8px;background:var(--s1);border:1px solid var(--b1);border-radius:8px;padding:8px 10px;min-width:180px">';
+      html += '<span style="font-size:16px">🎤</span>';
+      html += '<button id="'+btnId+'" onclick="playTrainerVoiceMessage(\''+m.audio_path+'\',\''+btnId+'\')" style="background:var(--teal3);border:1px solid var(--teal);color:var(--teal2);border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer">▶ Play</button>';
+      if(durLabel) html += '<span style="font-size:10px;color:var(--muted)">'+durLabel+'</span>';
+      html += '</div>';
+    } else {
+      html += '<div style="background:'+(isTrainer?"linear-gradient(135deg,#186476,var(--teal))":"var(--s1)")+';color:'+(isTrainer?"#fff":"var(--txt)")+';border:1px solid '+(isTrainer?"transparent":"var(--b1)")+';border-radius:12px;padding:9px 13px;font-size:13px;line-height:1.4">'+esc(m.body).replace(/\n/g,"<br>")+'</div>';
+    }
     html += '<div style="font-size:9px;color:var(--muted);margin-top:3px;text-align:'+(isTrainer?"right":"left")+';display:flex;gap:8px;justify-content:'+(isTrainer?"flex-end":"flex-start")+'">'+timeAgoShort(m.created_at)+'<a href="javascript:void(0)" onclick="deleteMessageById(\''+m.id+'\')" style="color:var(--muted);text-decoration:underline">delete</a></div>';
     html += '</div>';
   });
   html += '</div>';
-  html += '<div style="position:sticky;bottom:0;background:var(--bg);padding-top:8px;display:flex;gap:8px">';
-  html += '<textarea id="threadReplyBody" placeholder="Type a message…" style="flex:1;background:var(--s1);border:1.5px solid var(--b1);border-radius:8px;padding:11px;color:var(--txt);font-family:Barlow,sans-serif;font-size:14px;outline:none;resize:none;min-height:44px;max-height:100px"></textarea>';
-  html += '<button onclick="sendThreadReply()" style="background:linear-gradient(135deg,#186476,var(--teal));color:#fff;border:none;border-radius:8px;padding:0 18px;font-weight:700;cursor:pointer">Send</button>';
-  html += '</div>';
+  if(trainerRecording) {
+    html += '<div style="position:sticky;bottom:0;background:var(--bg);padding-top:8px">';
+    html += '<div style="display:flex;align-items:center;gap:10px;background:var(--s1);border:1.5px solid var(--red);border-radius:8px;padding:10px 14px">';
+    html += '<div style="width:10px;height:10px;border-radius:50%;background:var(--red);animation:pulse 1s infinite"></div>';
+    html += '<span style="font-size:13px;color:var(--txt);font-weight:700;flex:1">Recording… '+Math.floor(trainerRecordSeconds/60)+':'+String(trainerRecordSeconds%60).padStart(2,"0")+'</span>';
+    html += '<button onclick="cancelTrainerRecording()" style="background:transparent;border:1px solid var(--b1);color:var(--muted);border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer">Cancel</button>';
+    html += '<button onclick="stopAndSendTrainerRecording()" style="background:var(--teal);border:none;color:#fff;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer">Send</button>';
+    html += '</div></div>';
+  } else if(trainerUploadingVoice) {
+    html += '<div style="text-align:center;padding:10px;color:var(--muted);font-size:13px">Sending voice message…</div>';
+  } else {
+    html += '<div style="position:sticky;bottom:0;background:var(--bg);padding-top:8px;display:flex;gap:8px">';
+    html += '<textarea id="threadReplyBody" placeholder="Type a message…" style="flex:1;background:var(--s1);border:1.5px solid var(--b1);border-radius:8px;padding:11px;color:var(--txt);font-family:Barlow,sans-serif;font-size:14px;outline:none;resize:none;min-height:44px;max-height:100px"></textarea>';
+    html += '<button onclick="startTrainerRecording()" style="background:var(--s1);border:1.5px solid var(--b1);color:var(--txt);border-radius:8px;padding:0 16px;font-size:16px;cursor:pointer">🎤</button>';
+    html += '<button onclick="sendThreadReply()" style="background:linear-gradient(135deg,#186476,var(--teal));color:#fff;border:none;border-radius:8px;padding:0 18px;font-weight:700;cursor:pointer">Send</button>';
+    html += '</div>';
+  }
   return html;
 }
 
@@ -3858,7 +4032,7 @@ function renderMsgCompose() {
   if(state.composeType === "individual") {
     html += '<select id="composeClient" style="background:var(--bg);border:1.5px solid var(--b1);border-radius:8px;padding:11px;color:var(--txt);font-family:Barlow,sans-serif;font-size:14px;outline:none;width:100%;margin-bottom:12px">';
     html += '<option value="">Select a client…</option>';
-    state.clients.slice().sort(function(a,b){return a.name.localeCompare(b.name);}).forEach(function(c){ html += '<option value="'+c.id+'">'+esc(c.name)+'</option>'; });
+    state.clients.filter(function(c){return c.active!==false;}).sort(function(a,b){return a.name.localeCompare(b.name);}).forEach(function(c){ html += '<option value="'+c.id+'">'+esc(c.name)+'</option>'; });
     html += '</select>';
   } else if(state.composeType === "group") {
     if(!state.groups.length) {
@@ -3870,11 +4044,26 @@ function renderMsgCompose() {
       html += '</select>';
     }
   } else {
-    html += '<div style="font-size:12px;color:var(--muted);margin-bottom:12px">This will send to all '+state.clients.length+' clients.</div>';
+    var activeCount = state.clients.filter(function(c){ return c.active !== false; }).length;
+    html += '<div style="font-size:12px;color:var(--muted);margin-bottom:12px">This will send to all '+activeCount+' active clients.</div>';
   }
   html += '<div class="clbl">Message</div>';
-  html += '<textarea id="composeBody" placeholder="Write your message…" style="background:var(--bg);border:1.5px solid var(--b1);border-radius:8px;padding:11px;color:var(--txt);font-family:Barlow,sans-serif;font-size:14px;outline:none;width:100%;min-height:100px;resize:vertical;margin-bottom:12px"></textarea>';
-  html += '<button class="bp" onclick="sendComposeMessage()">Send Message</button>';
+  if(trainerRecording) {
+    html += '<div style="display:flex;align-items:center;gap:10px;background:var(--s1);border:1.5px solid var(--red);border-radius:8px;padding:10px 14px;margin-bottom:12px">';
+    html += '<div style="width:10px;height:10px;border-radius:50%;background:var(--red);animation:pulse 1s infinite"></div>';
+    html += '<span style="font-size:13px;color:var(--txt);font-weight:700;flex:1">Recording… '+Math.floor(trainerRecordSeconds/60)+':'+String(trainerRecordSeconds%60).padStart(2,"0")+'</span>';
+    html += '<button onclick="cancelTrainerRecording()" style="background:transparent;border:1px solid var(--b1);color:var(--muted);border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer">Cancel</button>';
+    html += '<button onclick="stopAndSendTrainerBroadcastRecording()" style="background:var(--teal);border:none;color:#fff;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer">Send</button>';
+    html += '</div>';
+  } else if(trainerUploadingVoice) {
+    html += '<div style="text-align:center;padding:10px;color:var(--muted);font-size:13px;margin-bottom:12px">Sending voice message…</div>';
+  } else {
+    html += '<textarea id="composeBody" placeholder="Write your message…" style="background:var(--bg);border:1.5px solid var(--b1);border-radius:8px;padding:11px;color:var(--txt);font-family:Barlow,sans-serif;font-size:14px;outline:none;width:100%;min-height:100px;resize:vertical;margin-bottom:12px"></textarea>';
+    html += '<div style="display:flex;gap:8px">';
+    html += '<button class="bp" style="flex:1" onclick="sendComposeMessage()">Send Message</button>';
+    html += '<button onclick="startTrainerRecording()" style="background:var(--s1);border:1.5px solid var(--b1);color:var(--txt);border-radius:8px;padding:0 16px;font-size:16px;cursor:pointer">🎤</button>';
+    html += '</div>';
+  }
   html += '</div>';
   return html;
 }
