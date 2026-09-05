@@ -189,6 +189,7 @@ body{font-family:'Barlow',sans-serif;color:var(--txt)}
       <div class="f"><label>Fat (g)</label><input type="number" id="ac_fat" placeholder="55"/></div>
     </div>
     <div class="fr2" style="margin-bottom:0"><div class="f"><label>Body Fat % Goal</label><input type="number" id="ac_bfgoal" placeholder="15.0" step="0.1"/></div><div class="f"><label>Target Weight (lbs)</label><input type="number" id="ac_wtgoal" placeholder="175"/></div></div>
+    <div class="f"><label>Food Preferences (for AI meal plans)</label><textarea id="ac_food_prefs" placeholder="e.g. chicken breast, rice, broccoli, salmon, sweet potatoes, greek yogurt, eggs, oatmeal"></textarea></div>
     <button class="bp" onclick="addClient()">Add Client</button>
     <button class="bg_" onclick="closeSheet('addClientSheet')">Cancel</button>
   </div>
@@ -249,6 +250,7 @@ body{font-family:'Barlow',sans-serif;color:var(--txt)}
       <div class="f"><label>Fat (g)</label><input type="number" id="ec_fat" placeholder="55"/></div>
     </div>
     <div class="fr2" style="margin-bottom:0"><div class="f"><label>Body Fat % Goal</label><input type="number" id="ec_bfgoal" placeholder="15.0" step="0.1"/></div><div class="f"><label>Target Weight (lbs)</label><input type="number" id="ec_wtgoal" placeholder="175"/></div></div>
+    <div class="f"><label>Food Preferences (for AI meal plans)</label><textarea id="ec_food_prefs" placeholder="e.g. chicken breast, rice, broccoli, salmon, sweet potatoes, greek yogurt, eggs, oatmeal"></textarea></div>
     <div class="sdiv"></div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <div>
@@ -548,6 +550,7 @@ body{font-family:'Barlow',sans-serif;color:var(--txt)}
   <div class="sheet" style="max-height:85vh;overflow-y:auto">
     <div class="hdl"></div>
     <div class="stitle">Meal Plan — <span id="mealPlanDateLabel"></span></div>
+    <div id="mealPlanPrefsNote" style="font-size:11px;color:var(--muted);margin-bottom:10px;display:none"></div>
     <button class="bp" id="mealPlanAISuggestBtn" onclick="suggestFullDayMeals()" style="margin-bottom:14px">🤖 AI Suggest Full Day</button>
     <div id="mealPlanAIStatus" style="font-size:12px;color:var(--muted);text-align:center;margin-bottom:10px;display:none">Generating suggestions based on this client's targets…</div>
     <div style="font-family:Barlow Condensed;font-size:9px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">Meals in This Plan</div>
@@ -1526,10 +1529,21 @@ function renderMealPlanList() {
 
 function openMealPlanBuilder(date) {
   mealPlanCurrentDate = date;
+  var a = getActive();
   var existing = state.mealPlans && state.mealPlans.find(function(p){ return p.date === date; });
   mealPlanMeals = existing ? JSON.parse(JSON.stringify(existing.meals || [])) : [];
   document.getElementById("mealPlanDateLabel").textContent = date;
   document.getElementById("mealPlanAIStatus").style.display = "none";
+  var prefsNote = document.getElementById("mealPlanPrefsNote");
+  if(prefsNote) {
+    if(a && a.food_preferences && a.food_preferences.trim()) {
+      prefsNote.innerHTML = '<strong style="color:var(--teal2)">Likes:</strong> ' + esc(a.food_preferences);
+      prefsNote.style.display = "block";
+    } else {
+      prefsNote.innerHTML = 'No food preferences set for this client yet — AI Suggest will use generic foods. Add preferences via Edit Client for better results.';
+      prefsNote.style.display = "block";
+    }
+  }
   resetMealPlanForm();
   renderMealPlanList();
   var foodListEl = document.getElementById("mealPlanFoodList");
@@ -1568,9 +1582,12 @@ async function deleteMealPlan(id) {
   } catch(e) { showToast("Could not delete"); }
 }
 
-var FULL_DAY_MEAL_PROMPT = function(goals, existingNames) {
+var FULL_DAY_MEAL_PROMPT = function(goals, existingNames, foodPreferences) {
   return "You are a precise sports nutrition expert building a full day of meals for a client, targeting these daily totals: "
     + goals.calories + " calories, " + goals.protein + "g protein, " + goals.carbs + "g carbs, " + goals.fat + "g fat.\n\n"
+    + (foodPreferences && foodPreferences.trim()
+        ? "This client likes and regularly eats the following foods — build the meals primarily around these specific foods rather than generic suggestions, combining and portioning them to hit the targets: " + foodPreferences.trim() + "\n\n"
+        : "")
     + "Design a realistic, practical full day of meals (Breakfast, Lunch, Dinner, and 1-2 snacks as needed) using whole, commonly available foods that together hit these targets as closely as possible. "
     + (existingNames && existingNames.length ? "Avoid repeating meals already in the plan: " + existingNames.join(", ") + ".\n\n" : "\n")
     + "Return ONLY a JSON array with no markdown, no preamble, in this exact shape:\n"
@@ -1591,7 +1608,7 @@ async function suggestFullDayMeals() {
     var res = await fetch(NUTRITION_PROXY_URL, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1200,
-        messages: [{ role: "user", content: FULL_DAY_MEAL_PROMPT(goals, existingNames) }] })
+        messages: [{ role: "user", content: FULL_DAY_MEAL_PROMPT(goals, existingNames, a.food_preferences) }] })
     });
     var data = await res.json();
     var raw = (data.content && data.content[0] && data.content[0].text) || "[]";
@@ -3077,11 +3094,12 @@ async function addClient() {
       carbs:+document.getElementById("ac_carb").value||0,
       fat:+document.getElementById("ac_fat").value||0,
       program_end_date: document.getElementById("ac_program_end").value || null,
+      food_preferences: document.getElementById("ac_food_prefs").value.trim(),
       pin:pin
     })});
     state.clients.push(data[0]);
     state.clients.sort(function(a,b){return a.name.localeCompare(b.name);});
-    ["ac_name","ac_goal","ac_notes","ac_cal","ac_pro","ac_carb","ac_fat","ac_bfgoal","ac_wtgoal","ac_program_end"].forEach(function(id){document.getElementById(id).value="";});
+    ["ac_name","ac_goal","ac_notes","ac_cal","ac_pro","ac_carb","ac_fat","ac_bfgoal","ac_wtgoal","ac_program_end","ac_food_prefs"].forEach(function(id){document.getElementById(id).value="";});
     closeSheet("addClientSheet");
     showToast(name + " added — PIN: " + pin);
     renderMain();
@@ -3520,6 +3538,7 @@ function openEditClient() {
   document.getElementById("ec_fat").value = a.fat || "";
   document.getElementById("ec_bfgoal").value = a.bf_goal || "";
   document.getElementById("ec_wtgoal").value = a.wt_goal || "";
+  document.getElementById("ec_food_prefs").value = a.food_preferences || "";
   document.getElementById("ec_program_end").value = a.program_end_date || "";
   editClientActiveState = a.active !== false;
   var btn = document.getElementById("ec_active_toggle");
@@ -3549,6 +3568,7 @@ async function saveEditClient() {
       fat:+document.getElementById("ec_fat").value||0,
       bf_goal:+document.getElementById("ec_bfgoal").value||null,
       wt_goal:+document.getElementById("ec_wtgoal").value||null,
+      food_preferences: document.getElementById("ec_food_prefs").value.trim(),
       program_end_date: document.getElementById("ec_program_end").value || null,
       active: editClientActiveState
     })});
@@ -3563,6 +3583,7 @@ async function saveEditClient() {
       state.clients[idx].fat = +document.getElementById("ec_fat").value||0;
       state.clients[idx].bf_goal = +document.getElementById("ec_bfgoal").value||null;
       state.clients[idx].wt_goal = +document.getElementById("ec_wtgoal").value||null;
+      state.clients[idx].food_preferences = document.getElementById("ec_food_prefs").value.trim();
       state.clients[idx].program_end_date = document.getElementById("ec_program_end").value || null;
       state.clients[idx].active = editClientActiveState;
     }
