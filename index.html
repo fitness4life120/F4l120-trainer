@@ -3659,8 +3659,19 @@ async function markThreadReadByTrainer(clientId) {
 function setComposeType(t) { state.composeType = t; state.composeIndividualClientId = null; renderMain(); }
 
 function selectComposeIndividualClient(id) {
+  var prevId = state.composeIndividualClientId;
   state.composeIndividualClientId = id;
-  renderMain();
+  var list = document.getElementById("composeIndividualList");
+  if(!list) { renderMain(); return; }
+  var rows = list.querySelectorAll("[data-client-id]");
+  rows.forEach(function(row){
+    var isSel = row.getAttribute("data-client-id") === id;
+    row.style.background = isSel ? "var(--teal3)" : "transparent";
+    var nameEl = row.querySelector("[data-client-name]");
+    var checkEl = row.querySelector("[data-check]");
+    if(nameEl) { nameEl.style.color = isSel ? "var(--teal2)" : "var(--txt)"; nameEl.style.fontWeight = isSel ? "700" : "400"; }
+    if(checkEl) checkEl.style.display = isSel ? "inline" : "none";
+  });
 }
 
 function getBroadcastTargets() {
@@ -4035,15 +4046,15 @@ function renderMsgCompose() {
   html += '</div>';
   if(state.composeType === "individual") {
     var activeClientsSorted = state.clients.filter(function(c){return c.active!==false;}).sort(function(a,b){return a.name.localeCompare(b.name);});
-    html += '<div style="max-height:220px;overflow-y:auto;border:1.5px solid var(--b1);border-radius:8px;margin-bottom:12px">';
+    html += '<div id="composeIndividualList" style="max-height:220px;overflow-y:auto;border:1.5px solid var(--b1);border-radius:8px;margin-bottom:12px">';
     if(!activeClientsSorted.length) {
       html += '<div style="padding:12px;font-size:12px;color:var(--muted);font-style:italic">No active clients</div>';
     } else {
       activeClientsSorted.forEach(function(c){
         var sel = state.composeIndividualClientId === c.id;
-        html += '<div onclick="selectComposeIndividualClient(\''+c.id+'\')" style="padding:11px 14px;cursor:pointer;background:'+(sel?"var(--teal3)":"transparent")+';border-bottom:1px solid var(--b1);display:flex;justify-content:space-between;align-items:center">';
-        html += '<span style="font-size:14px;color:'+(sel?"var(--teal2)":"var(--txt)")+';font-weight:'+(sel?"700":"400")+'">'+esc(c.name)+'</span>';
-        if(sel) html += '<span style="color:var(--teal2);font-size:14px">✓</span>';
+        html += '<div data-client-id="'+c.id+'" onclick="selectComposeIndividualClient(\''+c.id+'\')" style="padding:11px 14px;cursor:pointer;background:'+(sel?"var(--teal3)":"transparent")+';border-bottom:1px solid var(--b1);display:flex;justify-content:space-between;align-items:center">';
+        html += '<span data-client-name style="font-size:14px;color:'+(sel?"var(--teal2)":"var(--txt)")+';font-weight:'+(sel?"700":"400")+'">'+esc(c.name)+'</span>';
+        html += '<span data-check style="color:var(--teal2);font-size:14px;display:'+(sel?"inline":"none")+'">✓</span>';
         html += '</div>';
       });
     }
