@@ -3730,7 +3730,7 @@ function stopAndSendTrainerBroadcastRecording() {
         headers: { "apikey": KEY, "Authorization": "Bearer " + KEY, "Content-Type": blob.type },
         body: blob
       });
-      if(!res.ok) throw new Error("Upload failed");
+      if(!res.ok) { var errText = await res.text(); throw new Error("Upload failed ("+res.status+"): "+errText); }
       var isBroadcast = targets.length > 1;
       var broadcastId = isBroadcast ? uuidv4() : null;
       var rows = targets.map(function(cid){
@@ -3742,7 +3742,7 @@ function stopAndSendTrainerBroadcastRecording() {
       state.msgView = "inbox";
       var pushTitle = isBroadcast ? "New voice message from Coach Steve ("+label+")" : "New voice message from Coach Steve";
       sendPushToClients(targets, pushTitle, "🎤 Voice message");
-    } catch(e) { showToast("Could not send voice message"); }
+    } catch(e) { showToast("Could not send: " + e.message); }
     trainerUploadingVoice = false;
     renderMain();
   };
@@ -3807,11 +3807,11 @@ function stopAndSendTrainerRecording() {
         headers: { "apikey": KEY, "Authorization": "Bearer " + KEY, "Content-Type": blob.type },
         body: blob
       });
-      if(!res.ok) throw new Error("Upload failed");
+      if(!res.ok) { var errText = await res.text(); throw new Error("Upload failed ("+res.status+"): "+errText); }
       var saved = await api("messages", { method:"POST", body: JSON.stringify({ thread_client_id: clientId, sender:"trainer", audio_path: path, audio_duration: duration }) });
       if(saved && saved[0]) state.messages.push(saved[0]);
       sendPushToClients([clientId], "New voice message from Coach Steve", "🎤 Voice message");
-    } catch(e) { showToast("Could not send voice message"); }
+    } catch(e) { showToast("Could not send: " + e.message); }
     trainerUploadingVoice = false;
     renderMain();
   };
