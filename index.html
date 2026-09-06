@@ -3058,12 +3058,11 @@ async function loadClientData(id) {
       api("progress_photos?client_id=eq."+id+"&order=date.desc"),
       api("water_logs?client_id=eq."+id),
       api("daily_checkins?client_id=eq."+id+"&order=date.desc&limit=14"),
-      api("optional_workouts?client_id=eq."+id+"&order=created_at.desc"),
-      api("meal_plans?client_id=eq."+id+"&order=date.asc")
+      api("optional_workouts?client_id=eq."+id+"&order=created_at.desc")
     ]);
     state.cLogs = results[0]; state.cProg = results[1]; state.cPlans = results[2]; state.datedPlans = results[3]||[]; state.nLogs = results[4]||[];
     state.habits = results[5]||[]; state.habitLogs = results[6]||[]; state.progressPhotos = results[7]||[]; state.waterLogs = results[8]||[];
-    state.dailyCheckins = results[9]||[]; state.optionalWorkouts = results[10]||[]; state.mealPlans = results[11]||[];
+    state.dailyCheckins = results[9]||[]; state.optionalWorkouts = results[10]||[]; state.mealPlans = [];
     resolveProgressPhotoUrls().then(function(){ if(state.view === "progress") renderMain(); });
   } catch(e) { showToast("Error loading data"); }
 }
