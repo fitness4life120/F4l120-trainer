@@ -928,6 +928,66 @@ function renderMain() {
       });
     });
   });
+
+  // Attach edit exercise buttons
+  var editBtns2 = document.querySelectorAll(".edit-ex-btn");
+  editBtns2.forEach(function(btn) {
+    btn.addEventListener("click", function() {
+      var exId = btn.getAttribute("data-exid");
+      if(!exId) return;
+      var s = state.cLogs.find(function(e){ return e.id === exId; });
+      if(!s) return;
+      editingSetId = exId;
+      editingSetVals = {reps: s.reps||"", weight: s.weight||"", distance: s.distance||"", distance_unit: s.distance_unit||"mi"};
+      renderMain();
+    });
+  });
+
+  // Attach cancel-edit buttons
+  var cancelEditBtns = document.querySelectorAll(".cancel-edit-btn");
+  cancelEditBtns.forEach(function(btn) {
+    btn.addEventListener("click", function() {
+      editingSetId = null;
+      renderMain();
+    });
+  });
+
+  // Attach save-edit buttons
+  var saveEditBtns = document.querySelectorAll(".save-edit-btn");
+  saveEditBtns.forEach(function(btn) {
+    btn.addEventListener("click", function() {
+      var exId = btn.getAttribute("data-exid");
+      if(!exId) return;
+      var s = state.cLogs.find(function(e){ return e.id === exId; });
+      if(!s) return;
+      var patch;
+      if(s.log_type === "distance") {
+        var distEl = document.getElementById("editSetDist");
+        var unitEl = document.getElementById("editSetDistUnit");
+        patch = {distance: distEl && distEl.value ? +distEl.value : null, distance_unit: unitEl ? unitEl.value : "mi"};
+      } else if(s.log_type === "time") {
+        var repsElT = document.getElementById("editSetReps");
+        patch = {reps: repsElT && repsElT.value ? +repsElT.value : null};
+      } else {
+        var repsEl = document.getElementById("editSetReps");
+        var weightEl = document.getElementById("editSetWeight");
+        patch = {reps: repsEl && repsEl.value ? +repsEl.value : null, weight: weightEl && weightEl.value ? +weightEl.value : null};
+      }
+      btn.textContent = "…";
+      btn.disabled = true;
+      api("workout_logs?id=eq."+exId, {method:"PATCH", body: JSON.stringify(patch)}).then(function(rows) {
+        var updated = rows && rows[0];
+        if(updated) state.cLogs = state.cLogs.map(function(e){ return e.id === exId ? updated : e; });
+        editingSetId = null;
+        showToast("Set updated ✓");
+        renderMain();
+      }).catch(function(e) {
+        showToast("Could not update set");
+        btn.textContent = "Save";
+        btn.disabled = false;
+      });
+    });
+  });
 }
 
 function clientBanner() {
@@ -1116,8 +1176,12 @@ function renderLog() {
   return html;
 }
 
+var editingSetId = null;
+var editingSetVals = {};
+
 function renderExGroupTrainer(g) {
   var isTime = g.sets[0] && g.sets[0].log_type === "time";
+  var isDistance = g.sets[0] && g.sets[0].log_type === "distance";
   var vol = isTime ? 0 : g.sets.reduce(function(a,s){ return a+((+s.sets||1)*(+s.reps||0)*(+s.weight||0)); },0);
   var pr = getExercisePR(state.cLogs, g.exercise);
   var vidUrl = state.exerciseVideos[g.exercise];
@@ -1128,11 +1192,43 @@ function renderExGroupTrainer(g) {
     +'</div>';
   html += '<div style="display:flex;flex-direction:column;gap:3px;margin:6px 0">';
   g.sets.forEach(function(s,i){
+    if(s.id === editingSetId) {
+      if(isDistance) {
+        html += '<div style="display:flex;gap:6px;align-items:center;font-size:12px;padding:4px 0">'
+          +'<span style="color:var(--muted);min-width:38px">Set '+(i+1)+':</span>'
+          +'<input type="number" id="editSetDist" value="'+esc(editingSetVals.distance||"")+'" placeholder="dist" style="width:55px;background:var(--bg);border:1px solid var(--b1);border-radius:5px;padding:3px 6px;color:var(--txt);font-size:12px">'
+          +'<select id="editSetDistUnit" style="background:var(--bg);border:1px solid var(--b1);border-radius:5px;padding:3px 4px;color:var(--txt);font-size:12px">'
+          +'<option value="mi"'+(editingSetVals.distance_unit==="mi"?' selected':'')+'>mi</option>'
+          +'<option value="km"'+(editingSetVals.distance_unit==="km"?' selected':'')+'>km</option></select>'
+          +'<button class="save-edit-btn" data-exid="'+s.id+'" style="background:transparent;border:none;color:var(--teal2);font-weight:700;cursor:pointer;font-size:11px">Save</button>'
+          +'<button class="cancel-edit-btn" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:11px">Cancel</button>'
+          +'</div>';
+      } else if(isTime) {
+        html += '<div style="display:flex;gap:6px;align-items:center;font-size:12px;padding:4px 0">'
+          +'<span style="color:var(--muted);min-width:38px">Set '+(i+1)+':</span>'
+          +'<input type="number" id="editSetReps" value="'+esc(editingSetVals.reps||"")+'" placeholder="sec" style="width:60px;background:var(--bg);border:1px solid var(--b1);border-radius:5px;padding:3px 6px;color:var(--txt);font-size:12px">'
+          +'<button class="save-edit-btn" data-exid="'+s.id+'" style="background:transparent;border:none;color:var(--teal2);font-weight:700;cursor:pointer;font-size:11px">Save</button>'
+          +'<button class="cancel-edit-btn" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:11px">Cancel</button>'
+          +'</div>';
+      } else {
+        html += '<div style="display:flex;gap:6px;align-items:center;font-size:12px;padding:4px 0">'
+          +'<span style="color:var(--muted);min-width:38px">Set '+(i+1)+':</span>'
+          +'<input type="number" id="editSetReps" value="'+esc(editingSetVals.reps||"")+'" placeholder="reps" style="width:55px;background:var(--bg);border:1px solid var(--b1);border-radius:5px;padding:3px 6px;color:var(--txt);font-size:12px">'
+          +'<input type="number" id="editSetWeight" value="'+esc(editingSetVals.weight||"")+'" placeholder="lbs" style="width:55px;background:var(--bg);border:1px solid var(--b1);border-radius:5px;padding:3px 6px;color:var(--txt);font-size:12px">'
+          +'<button class="save-edit-btn" data-exid="'+s.id+'" style="background:transparent;border:none;color:var(--teal2);font-weight:700;cursor:pointer;font-size:11px">Save</button>'
+          +'<button class="cancel-edit-btn" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:11px">Cancel</button>'
+          +'</div>';
+      }
+      return;
+    }
     var unit = s.log_type === "time" ? " sec" : s.log_type === "distance" ? " " + (s.distance_unit||"mi") : " reps";
     var valueDisplay = s.log_type === "distance" ? (s.distance||"?") : (s.reps||"?");
     html += '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted)">'
       + '<span>Set '+(i+1)+': '+valueDisplay+unit+(s.each_side?' each':'')+(s.weight?' @ '+s.weight+' lbs':'')+'</span>'
+      + '<span>'
+      + '<button data-exid="'+s.id+'" class="edit-ex-btn" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:11px;text-decoration:underline;padding:2px 4px;margin-right:6px">edit</button>'
       + '<button data-exid="'+s.id+'" class="del-ex-btn" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:11px;text-decoration:underline;padding:2px 4px">remove</button>'
+      + '</span>'
       + '</div>';
   });
   html += '</div>';
