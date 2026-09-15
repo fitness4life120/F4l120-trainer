@@ -988,6 +988,77 @@ function renderMain() {
       });
     });
   });
+
+  // Attach "+ Add Set" links
+  var addSetLinks = document.querySelectorAll(".add-set-link");
+  addSetLinks.forEach(function(link) {
+    link.addEventListener("click", function() {
+      addingSetKey = link.getAttribute("data-groupkey");
+      addSetVals = {reps:"", weight:"", distance:"", distance_unit:"mi"};
+      renderMain();
+    });
+  });
+
+  // Attach cancel-add-set buttons
+  var cancelAddSetBtns = document.querySelectorAll(".cancel-add-set-btn");
+  cancelAddSetBtns.forEach(function(btn) {
+    btn.addEventListener("click", function() {
+      addingSetKey = null;
+      renderMain();
+    });
+  });
+
+  // Attach save-add-set buttons
+  var saveAddSetBtns = document.querySelectorAll(".save-add-set-btn");
+  saveAddSetBtns.forEach(function(btn) {
+    btn.addEventListener("click", function() {
+      var logType = btn.getAttribute("data-logtype") || "reps";
+      var isDist = logType === "distance";
+      var isTimeType = logType === "time";
+      var payload = {
+        client_id: getActive().id,
+        exercise: btn.getAttribute("data-exercise"),
+        muscle: btn.getAttribute("data-muscle") || null,
+        notes: btn.getAttribute("data-notes") || null,
+        date: btn.getAttribute("data-date"),
+        from_plan: btn.getAttribute("data-fromplan") === "true",
+        exercise_group: btn.getAttribute("data-exgroupid") || null,
+        log_type: logType,
+        each_side: btn.getAttribute("data-eachside") === "true",
+        sets: "1"
+      };
+      if(isDist) {
+        var distEl = document.getElementById("addSetDist");
+        var unitEl = document.getElementById("addSetDistUnit");
+        payload.distance = distEl && distEl.value ? +distEl.value : null;
+        payload.distance_unit = unitEl ? unitEl.value : "mi";
+        payload.reps = null; payload.weight = null;
+      } else if(isTimeType) {
+        var repsElT2 = document.getElementById("addSetReps");
+        payload.reps = repsElT2 && repsElT2.value ? +repsElT2.value : null;
+        payload.weight = null; payload.distance = null; payload.distance_unit = null;
+      } else {
+        var repsEl2 = document.getElementById("addSetReps");
+        var weightEl2 = document.getElementById("addSetWeight");
+        payload.reps = repsEl2 && repsEl2.value ? +repsEl2.value : null;
+        payload.weight = weightEl2 && weightEl2.value ? +weightEl2.value : null;
+        payload.distance = null; payload.distance_unit = null;
+      }
+      btn.textContent = "…";
+      btn.disabled = true;
+      api("workout_logs", {method:"POST", body: JSON.stringify(payload)}).then(function(rows) {
+        var saved = rows && rows[0];
+        if(saved) state.cLogs.push(saved);
+        addingSetKey = null;
+        showToast("Set added ✓");
+        renderMain();
+      }).catch(function(e) {
+        showToast("Could not add set");
+        btn.textContent = "Add";
+        btn.disabled = false;
+      });
+    });
+  });
 }
 
 function clientBanner() {
@@ -1178,10 +1249,13 @@ function renderLog() {
 
 var editingSetId = null;
 var editingSetVals = {};
+var addingSetKey = null;
+var addSetVals = {reps:"", weight:"", distance:"", distance_unit:"mi"};
 
 function renderExGroupTrainer(g) {
   var isTime = g.sets[0] && g.sets[0].log_type === "time";
   var isDistance = g.sets[0] && g.sets[0].log_type === "distance";
+  var groupKey = g.exercise + "|" + (g.sets[0].exercise_group||"");
   var vol = isTime ? 0 : g.sets.reduce(function(a,s){ return a+((+s.sets||1)*(+s.reps||0)*(+s.weight||0)); },0);
   var pr = getExercisePR(state.cLogs, g.exercise);
   var vidUrl = state.exerciseVideos[g.exercise];
@@ -1231,6 +1305,36 @@ function renderExGroupTrainer(g) {
       + '</span>'
       + '</div>';
   });
+  if(addingSetKey === groupKey) {
+    if(isDistance) {
+      html += '<div style="display:flex;gap:6px;align-items:center;font-size:12px;padding:4px 0">'
+        +'<span style="color:var(--muted);min-width:38px">Set '+(g.sets.length+1)+':</span>'
+        +'<input type="number" id="addSetDist" value="'+esc(addSetVals.distance||"")+'" placeholder="dist" style="width:55px;background:var(--bg);border:1px solid var(--b1);border-radius:5px;padding:3px 6px;color:var(--txt);font-size:12px">'
+        +'<select id="addSetDistUnit" style="background:var(--bg);border:1px solid var(--b1);border-radius:5px;padding:3px 4px;color:var(--txt);font-size:12px">'
+        +'<option value="mi"'+(addSetVals.distance_unit==="mi"?' selected':'')+'>mi</option>'
+        +'<option value="km"'+(addSetVals.distance_unit==="km"?' selected':'')+'>km</option></select>'
+        +'<button class="save-add-set-btn" data-exercise="'+esc(g.exercise)+'" data-muscle="'+esc(g.muscle||"")+'" data-notes="'+esc(g.notes||"")+'" data-date="'+esc(g.sets[0].date)+'" data-fromplan="'+(!!g.from_plan)+'" data-exgroupid="'+esc(g.sets[0].exercise_group||"")+'" data-logtype="'+esc(g.sets[0].log_type||"reps")+'" data-eachside="'+(!!g.sets[0].each_side)+'" style="background:transparent;border:none;color:var(--teal2);font-weight:700;cursor:pointer;font-size:11px">Add</button>'
+        +'<button class="cancel-add-set-btn" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:11px">Cancel</button>'
+        +'</div>';
+    } else if(isTime) {
+      html += '<div style="display:flex;gap:6px;align-items:center;font-size:12px;padding:4px 0">'
+        +'<span style="color:var(--muted);min-width:38px">Set '+(g.sets.length+1)+':</span>'
+        +'<input type="number" id="addSetReps" value="'+esc(addSetVals.reps||"")+'" placeholder="sec" style="width:60px;background:var(--bg);border:1px solid var(--b1);border-radius:5px;padding:3px 6px;color:var(--txt);font-size:12px">'
+        +'<button class="save-add-set-btn" data-exercise="'+esc(g.exercise)+'" data-muscle="'+esc(g.muscle||"")+'" data-notes="'+esc(g.notes||"")+'" data-date="'+esc(g.sets[0].date)+'" data-fromplan="'+(!!g.from_plan)+'" data-exgroupid="'+esc(g.sets[0].exercise_group||"")+'" data-logtype="'+esc(g.sets[0].log_type||"reps")+'" data-eachside="'+(!!g.sets[0].each_side)+'" style="background:transparent;border:none;color:var(--teal2);font-weight:700;cursor:pointer;font-size:11px">Add</button>'
+        +'<button class="cancel-add-set-btn" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:11px">Cancel</button>'
+        +'</div>';
+    } else {
+      html += '<div style="display:flex;gap:6px;align-items:center;font-size:12px;padding:4px 0">'
+        +'<span style="color:var(--muted);min-width:38px">Set '+(g.sets.length+1)+':</span>'
+        +'<input type="number" id="addSetReps" value="'+esc(addSetVals.reps||"")+'" placeholder="reps" style="width:55px;background:var(--bg);border:1px solid var(--b1);border-radius:5px;padding:3px 6px;color:var(--txt);font-size:12px">'
+        +'<input type="number" id="addSetWeight" value="'+esc(addSetVals.weight||"")+'" placeholder="lbs" style="width:55px;background:var(--bg);border:1px solid var(--b1);border-radius:5px;padding:3px 6px;color:var(--txt);font-size:12px">'
+        +'<button class="save-add-set-btn" data-exercise="'+esc(g.exercise)+'" data-muscle="'+esc(g.muscle||"")+'" data-notes="'+esc(g.notes||"")+'" data-date="'+esc(g.sets[0].date)+'" data-fromplan="'+(!!g.from_plan)+'" data-exgroupid="'+esc(g.sets[0].exercise_group||"")+'" data-logtype="'+esc(g.sets[0].log_type||"reps")+'" data-eachside="'+(!!g.sets[0].each_side)+'" style="background:transparent;border:none;color:var(--teal2);font-weight:700;cursor:pointer;font-size:11px">Add</button>'
+        +'<button class="cancel-add-set-btn" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:11px">Cancel</button>'
+        +'</div>';
+    }
+  } else {
+    html += '<div style="margin-top:2px"><span class="add-set-link" data-groupkey="'+esc(groupKey)+'" style="cursor:pointer;color:var(--teal2);font-size:11px;font-weight:700">+ Add Set</span></div>';
+  }
   html += '</div>';
   html += '<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">'
     +(g.muscle?'<span class="mtag">'+esc(g.muscle)+'</span>':'')
