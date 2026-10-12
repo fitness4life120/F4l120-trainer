@@ -1988,7 +1988,7 @@ function renderExCardTrainer(ex) {
   var pr = getExercisePR(state.cLogs, ex.name);
   var hasVid = !!state.exerciseVideos[ex.name];
   var isTime = ex.type === "time";
-  var done = state.cLogs.some(function(l){ return l.date === state.selCalDate && l.exercise === ex.name; });
+  var done = state.cLogs.some(function(l){ return (l.date === state.selCalDate || l.plan_date === state.selCalDate) && l.exercise === ex.name; });
   var html = '<div style="background:'+(done?"rgba(45,186,128,0.08)":"var(--s1)")+';border:1px solid '+(done?"rgba(45,186,128,0.2)":"var(--b1)")+';border-left:3px solid '+(done?"var(--green)":"var(--gold)")+';border-radius:7px;padding:9px 12px;margin-bottom:5px">';
   html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">';
   html += '<span style="font-size:13px;font-weight:600">'+esc(ex.name)+(isTime?' <span style="font-size:9px;color:var(--gold);background:var(--gold2);border-radius:3px;padding:1px 5px;margin-left:4px">TIME</span>':'')+'</span>';
@@ -2041,7 +2041,7 @@ function renderTrainerCal() {
   for(var d=1; d<=daysInMonth; d++) {
     var dateStr = y+'-'+(m+1<10?'0'+(m+1):(m+1))+'-'+(d<10?'0'+d:d);
     var hasPlan = state.datedPlans && state.datedPlans.some(function(p){return p.date===dateStr;});
-    var hasLog = state.cLogs && state.cLogs.some(function(l){return l.date===dateStr;});
+    var hasLog = state.cLogs && state.cLogs.some(function(l){return l.date===dateStr || l.plan_date===dateStr;});
     var isToday = dateStr === today;
     var isSel = state.selCalDate === dateStr;
     var bg = isSel ? 'var(--teal)' : isToday ? 'var(--teal3)' : hasPlan ? 'var(--gold2)' : 'var(--bg)';
@@ -3539,7 +3539,9 @@ function logPlanExFromTrainerByName(exName, groupId) {
   logPlanExFromTrainer(ex, groupMembers);
 }
 
+var logPlanDate = null; // the plan day an exercise is being logged against (may differ from the date it was actually done)
 function logPlanExFromTrainer(ex, groupMembers) {
+  logPlanDate = state.selCalDate || null;
   var sheet = document.getElementById("logExSheet");
   if(!sheet) { showToast("Sheet not found"); return; }
   var a = getActive(); if(!a) return;
@@ -3578,6 +3580,7 @@ function openLogEx() {
   if(!sheet) { showToast("Sheet not found"); return; }
   var a = getActive(); if(!a) return;
   document.getElementById("logExClientName").textContent = a.name;
+  logPlanDate = null;
   document.getElementById("le_notes").value = "";
   document.getElementById("le_date").value = tod();
   logExBlockIds = [0];
@@ -3619,7 +3622,7 @@ async function saveLogEx() {
           reps: isDistance ? null : r.reps,
           distance: isDistance ? r.reps : null,
           distance_unit: isDistance ? b.unit : null,
-          weight: r.weight, muscle: b.muscle, notes: notes, date: date, from_plan: false,
+          weight: r.weight, muscle: b.muscle, notes: notes, date: date, from_plan: !!logPlanDate, plan_date: logPlanDate || null,
           exercise_group: groupId, log_type: b.type, each_side: b.eachSide
         });
       });
