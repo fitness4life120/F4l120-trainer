@@ -1350,7 +1350,7 @@ function renderExGroupTrainer(g) {
     +(g.notes?'<span style="font-size:10px;color:var(--soft);font-style:italic">'+esc(g.notes)+'</span>':'')
     +(vid?'<a href="https://www.youtube.com/watch?v='+vid+'" target="_blank" style="font-size:10px;color:var(--teal2);background:var(--teal3);border:1px solid var(--teal);border-radius:5px;padding:3px 8px;text-decoration:none">▶ Watch</a>':'')
     +'</div>'
-    +(pr?'<div style="font-size:10px;color:var(--gold);margin-top:4px;font-weight:700">🏆 PR: '+pr.weight+' lbs × '+pr.reps+(pr.log_type==="time"?" sec":"")+'</div>':'')
+    +(pr?'<div style="font-size:10px;color:var(--gold);margin-top:4px;font-weight:700">🏆 PR: '+pr.weight+' '+(pr.unit||'lbs')+' × '+pr.reps+(pr.log_type==="time"?" sec":"")+'</div>':'')
     +'</div>';
   return html;
 }
@@ -1995,7 +1995,7 @@ function renderExCardTrainer(ex) {
   html += '<span style="font-size:10px;color:'+(hasVid?"var(--green)":"var(--muted)")+'">'+(hasVid?"🎥":"")+'</span>';
   html += '</div>';
   html += '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+ex.sets+'×'+ex.reps+(ex.each_side?' each':'')+(ex.weight?' @ '+esc(ex.weight)+' lbs':'')+(ex.muscle?' · '+esc(ex.muscle):'')+(ex.rest?' · Rest '+esc(ex.rest):'')+'</div>';
-  if(pr) html += '<div style="font-size:10px;color:var(--gold);margin-top:2px;font-weight:700">🏆 PR: '+pr.weight+' lbs × '+pr.reps+(pr.log_type==="time"?" sec":"")+'</div>';
+  if(pr) html += '<div style="font-size:10px;color:var(--gold);margin-top:2px;font-weight:700">🏆 PR: '+pr.weight+' '+(pr.unit||'lbs')+' × '+pr.reps+(pr.log_type==="time"?" sec":"")+'</div>';
   if(done) {
     html += '<span style="display:inline-block;font-size:11px;color:var(--green);font-weight:700;margin-top:6px">✓ Completed</span>';
   } else {
@@ -2873,10 +2873,11 @@ function renderStats() {
   var allVol = state.cLogs.reduce(function(s,e){return s+((+e.sets||0)*(+e.reps||0)*(+e.weight||0));},0);
   var grp = {}; state.cLogs.forEach(function(e){if(!grp[e.date])grp[e.date]=[];grp[e.date].push(e);});
   var mCnt = {}; state.cLogs.forEach(function(e){mCnt[e.muscle]=(mCnt[e.muscle]||0)+1;});
-  var bests = {}; state.cLogs.forEach(function(e){
-    if(!e.weight) return;
+  var bests = {}, bestUnit = {}; state.cLogs.forEach(function(e){
+    var pv = prValueOf(e);
+    if(!pv) return;
     var inverted = isInvertedPRExercise(e.exercise);
-    if(!bests[e.exercise] || (inverted ? +e.weight<+bests[e.exercise] : +e.weight>+bests[e.exercise])) bests[e.exercise]=e.weight;
+    if(!bests[e.exercise] || (inverted ? pv.v<+bests[e.exercise] : pv.v>+bests[e.exercise])){ bests[e.exercise]=pv.v; bestUnit[e.exercise]=pv.unit; }
   });
   var html = clientBanner();
   html += '<div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:8px">';
@@ -2917,7 +2918,7 @@ function renderStats() {
     prEntries.forEach(function(entry){
       html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--b1)">'
         +'<span style="font-size:13px;font-weight:500">'+esc(entry[0])+'</span>'
-        +'<span style="font-family:Barlow Condensed;font-size:15px;font-weight:700;color:var(--teal2)">'+entry[1]+' lbs</span>'
+        +'<span style="font-family:Barlow Condensed;font-size:15px;font-weight:700;color:var(--teal2)">'+entry[1]+' '+(bestUnit[entry[0]]||'lbs')+'</span>'
         +'</div>';
     });
   } else {
@@ -3004,7 +3005,13 @@ function normalizeExName(name) {
 }
 var INVERTED_PR_EXERCISES = new Set(["assisted dip", "assisted pull up"]);
 function isInvertedPRExercise(name) {
-  return INVERTED_PR_EXERCISES.has(normalizeExName(name));
+  // Assisted lifts (less assistance = better) and depth drops (a fall, not a climb: opposite of box jumps)
+  return INVERTED_PR_EXERCISES.has(normalizeExName(name)) || /depth (drop|jump)/.test(normalizeExName(name));
+}
+function prValueOf(l){
+  if(+l.weight>0) return {v:+l.weight, unit:"lbs"};
+  if(+l.height>0) return {v:+l.height, unit:l.height_unit||"in"};
+  return null;
 }
 
 function getExercisePR(logs, exerciseName) {
@@ -3013,9 +3020,10 @@ function getExercisePR(logs, exerciseName) {
   var targetNorm = normalizeExName(exerciseName);
   (logs||[]).forEach(function(l){
     if(normalizeExName(l.exercise) !== targetNorm) return;
-    var w = +l.weight || 0;
-    if(w <= 0) return;
-    if(!best || (inverted ? w < best.weight : w > best.weight)) best = { weight: w, reps: l.reps, log_type: l.log_type };
+    var pv = prValueOf(l);
+    if(!pv) return;
+    var w = pv.v;
+    if(!best || (inverted ? w < best.weight : w > best.weight)) best = { weight: w, reps: l.reps, log_type: l.log_type, unit: pv.unit };
   });
   return best;
 }
