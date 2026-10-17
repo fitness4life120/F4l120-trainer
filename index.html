@@ -233,6 +233,42 @@ body{font-family:'Barlow',sans-serif;color:var(--txt)}
   </div>
 </div>
 
+<div class="overlay" id="goalSheet">
+  <div class="sheet">
+    <div class="hdl"></div>
+    <div class="stitle">Add Quarterly Goal</div>
+    <div class="f"><label>Goal</label><input id="gl_title" placeholder="e.g. Raise VO2 max to 45"/></div>
+    <div class="f"><label>Track Automatically From</label><select id="gl_metric" onchange="goalMetricChanged()"></select></div>
+    <div class="fr3">
+      <div class="f"><label>Start</label><input type="number" id="gl_start" step="any" placeholder="40"/></div>
+      <div class="f"><label>Target</label><input type="number" id="gl_target" step="any" placeholder="45"/></div>
+      <div class="f"><label>Unit</label><input id="gl_unit" placeholder="lbs"/></div>
+    </div>
+    <div class="f"><label>Target Date</label><input type="date" id="gl_date"/></div>
+    <button class="bp" onclick="saveGoal()">Save Goal</button>
+    <button class="bg_" onclick="closeSheet('goalSheet')">Cancel</button>
+  </div>
+</div>
+<div class="overlay" id="labSheet">
+  <div class="sheet">
+    <div class="hdl"></div>
+    <div class="stitle">Add Lab Result</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Enter the value and the reference range exactly as printed on the client's lab report.</div>
+    <div class="f"><label>Date of Test</label><input type="date" id="lb_date"/></div>
+    <div class="f"><label>Test</label><select id="lb_test" onchange="labTestChanged()"></select></div>
+    <div class="f" id="lb_custom_wrap" style="display:none"><label>Test Name</label><input id="lb_custom" placeholder="e.g. Cortisol (AM)"/></div>
+    <div class="fr2">
+      <div class="f"><label>Result</label><input type="number" id="lb_value" step="any"/></div>
+      <div class="f"><label>Unit</label><input id="lb_unit" placeholder="mg/dL"/></div>
+    </div>
+    <div class="fr2">
+      <div class="f"><label>Lab Range Low</label><input type="number" id="lb_low" step="any" placeholder="optional"/></div>
+      <div class="f"><label>Lab Range High</label><input type="number" id="lb_high" step="any" placeholder="optional"/></div>
+    </div>
+    <button class="bp" onclick="saveLabResult()">Save Result</button>
+    <button class="bg_" onclick="closeSheet('labSheet')">Done</button>
+  </div>
+</div>
 <div class="overlay" id="editClientSheet">
   <div class="sheet">
     <div class="hdl"></div>
@@ -2541,6 +2577,309 @@ function selectProgressExercise(ex) {
   renderMain();
 }
 
+
+// ── GOALS ──
+var GOAL_METRICS = {
+  manual:{label:"Manual (I'll update it)", unit:""},
+  weight:{label:"Body Weight", unit:"lbs", field:"weight"},
+  body_fat:{label:"Body Fat %", unit:"%", field:"body_fat"},
+  muscle_mass:{label:"Muscle Mass", unit:"lbs", field:"muscle_mass"},
+  visceral_fat:{label:"Visceral Fat", unit:"", field:"visceral_fat"},
+  waist:{label:"Waist", unit:"in", field:"waist"},
+  vo2_max:{label:"VO2 Max", unit:"", field:"vo2_max"},
+  resting_heart_rate:{label:"Resting Heart Rate", unit:"bpm", field:"resting_heart_rate"},
+  hrv:{label:"HRV", unit:"ms", field:"hrv"},
+  hang_time_seconds:{label:"Dead Hang", unit:"s", field:"hang_time_seconds"},
+  grip_strength:{label:"Grip Strength", unit:"lbs", field:"grip_strength"},
+  sit_to_stand:{label:"30-Sec Sit-to-Stand", unit:"reps", field:"sit_to_stand"},
+  balance_sec:{label:"Single-Leg Balance", unit:"s", field:"balance_sec"},
+  pushups_max:{label:"Max Push-ups", unit:"reps", field:"pushups_max"},
+  plank_sec:{label:"Plank Hold", unit:"s", field:"plank_sec"}
+};
+function goalLatestValue(g, prog) {
+  var m = GOAL_METRICS[g.metric];
+  if(m && m.field) {
+    var rows = (prog||[]).filter(function(p){ return p[m.field] != null && p[m.field] !== "" && +p[m.field] > 0; })
+      .sort(function(x,y){ return String(y.date).localeCompare(String(x.date)); });
+    if(rows.length) return +rows[0][m.field];
+  }
+  return g.current_value != null ? +g.current_value : null;
+}
+function goalProgressInfo(g, prog) {
+  var cur = goalLatestValue(g, prog);
+  var start = g.start_value != null ? +g.start_value : null, target = g.target_value != null ? +g.target_value : null;
+  var info = { cur:cur, pct:0, status:"In progress", color:"var(--teal2)", rgb:[24,100,118] };
+  if(start == null || target == null || cur == null) { info.status = cur == null ? "No data yet" : "In progress"; info.color = "var(--muted)"; info.rgb = [110,110,110]; return info; }
+  var up = target >= start;
+  var reached = up ? cur >= target : cur <= target;
+  var pct = start === target ? 1 : (cur - start) / (target - start);
+  info.pct = Math.max(0, Math.min(1, pct));
+  if(reached || g.status === "achieved") { info.status = "Achieved"; info.pct = 1; info.color = "var(--green)"; info.rgb = [30,140,90]; return info; }
+  if(g.target_date && g.start_date) {
+    var s = new Date(g.start_date+"T12:00:00").getTime(), e = new Date(g.target_date+"T12:00:00").getTime(), n = Date.now();
+    var exp = e > s ? Math.max(0, Math.min(1, (n - s) / (e - s))) : 1;
+    if(n > e) { info.status = "Past due"; info.color = "var(--red)"; info.rgb = [190,60,60]; }
+    else if(info.pct >= exp - 0.1) { info.status = "On track"; info.color = "var(--green)"; info.rgb = [30,140,90]; }
+    else { info.status = "Behind"; info.color = "var(--gold)"; info.rgb = [160,125,30]; }
+  }
+  return info;
+}
+function fmtGoalNum(n, unit) { if(n == null) return "—"; return (Math.round(n*10)/10) + (unit ? " "+unit : ""); }
+function renderGoalsCardTrainer() {
+  var goals = state.cGoals || [];
+  var html = '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="clbl" style="margin-bottom:0">Quarterly Goals</div>'
+    + '<button class="chip" style="cursor:pointer;color:var(--teal2);background:var(--teal3)" onclick="openGoalSheet()">+ Add Goal</button></div>';
+  if(!goals.length) {
+    html += '<div style="color:var(--muted);font-size:12px;font-style:italic">No goals set yet. Add 3–5 goals for the next 90 days.</div>';
+  }
+  goals.forEach(function(g){
+    var info = goalProgressInfo(g, state.cProg);
+    var auto = g.metric && g.metric !== "manual";
+    html += '<div style="padding:10px 0;border-top:1px solid var(--b1)">'
+      + '<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div style="font-size:13px;font-weight:700">'+esc(g.title)+'</div>'
+      + '<span style="font-size:10px;font-weight:700;color:'+info.color+';white-space:nowrap">'+info.status+'</span></div>'
+      + '<div style="font-size:11px;color:var(--muted);margin:3px 0 6px">'+fmtGoalNum(+g.start_value, g.unit)+' → <strong style="color:var(--txt)">'+fmtGoalNum(info.cur, g.unit)+'</strong> / target '+fmtGoalNum(+g.target_value, g.unit)+(g.target_date?' · by '+esc(g.target_date):'')+(auto?' · auto':'')+'</div>'
+      + '<div style="height:6px;background:var(--bg);border-radius:3px;overflow:hidden"><div style="height:100%;width:'+Math.round(info.pct*100)+'%;background:'+info.color+'"></div></div>'
+      + '<div style="display:flex;gap:6px;margin-top:8px">'
+      + (auto ? '' : '<button class="chip" style="cursor:pointer" onclick="updateGoalValue(\''+g.id+'\')">Update</button>')
+      + (g.status === "achieved" ? '' : '<button class="chip" style="cursor:pointer" onclick="markGoalAchieved(\''+g.id+'\')">✓ Achieved</button>')
+      + '<button class="chip" style="cursor:pointer;color:var(--red)" onclick="deleteGoal(\''+g.id+'\')">Delete</button></div></div>';
+  });
+  html += '</div>';
+  return html;
+}
+function openGoalSheet() {
+  var sel = document.getElementById("gl_metric");
+  sel.innerHTML = Object.keys(GOAL_METRICS).map(function(k){ return '<option value="'+k+'">'+GOAL_METRICS[k].label+'</option>'; }).join("");
+  document.getElementById("gl_title").value = "";
+  document.getElementById("gl_start").value = "";
+  document.getElementById("gl_target").value = "";
+  document.getElementById("gl_unit").value = "";
+  var d = new Date(); d.setDate(d.getDate()+90);
+  document.getElementById("gl_date").value = d.toISOString().slice(0,10);
+  openSheet("goalSheet");
+}
+function goalMetricChanged() {
+  var k = document.getElementById("gl_metric").value, m = GOAL_METRICS[k];
+  document.getElementById("gl_unit").value = m.unit || "";
+  if(m.field) {
+    var v = goalLatestValue({metric:k}, state.cProg);
+    document.getElementById("gl_start").value = v != null ? v : "";
+    if(!document.getElementById("gl_title").value) document.getElementById("gl_title").value = m.label + " goal";
+  }
+}
+async function saveGoal() {
+  var a = getActive(); if(!a) return;
+  var title = document.getElementById("gl_title").value.trim();
+  var target = document.getElementById("gl_target").value;
+  if(!title || target === "") { showToast("Add a goal name and a target"); return; }
+  var startRaw = document.getElementById("gl_start").value;
+  var metric = document.getElementById("gl_metric").value;
+  try {
+    var body = { client_id:a.id, title:title, metric:metric, unit:document.getElementById("gl_unit").value.trim()||null,
+      start_value: startRaw === "" ? null : +startRaw, target_value:+target,
+      current_value: metric === "manual" ? (startRaw === "" ? null : +startRaw) : null,
+      start_date: new Date().toISOString().slice(0,10), target_date: document.getElementById("gl_date").value || null };
+    var rows = await api("client_goals", {method:"POST", body:JSON.stringify(body)});
+    if(rows && rows[0]) state.cGoals.push(rows[0]); else await loadClientData(a.id);
+    closeSheet("goalSheet"); showToast("Goal added ✓"); renderMain();
+  } catch(e) { showToast("Could not save goal: " + e.message); }
+}
+async function updateGoalValue(id) {
+  var g = (state.cGoals||[]).find(function(x){ return x.id === id; }); if(!g) return;
+  var v = prompt("Current value for \"" + g.title + "\"" + (g.unit ? " ("+g.unit+")" : "") + ":", g.current_value != null ? g.current_value : "");
+  if(v === null || v.trim() === "" || isNaN(+v)) return;
+  try { await api("client_goals?id=eq."+id, {method:"PATCH", body:JSON.stringify({current_value:+v})}); g.current_value = +v; renderMain(); showToast("Updated ✓"); }
+  catch(e) { showToast("Could not update: " + e.message); }
+}
+async function markGoalAchieved(id) {
+  var g = (state.cGoals||[]).find(function(x){ return x.id === id; }); if(!g) return;
+  try { await api("client_goals?id=eq."+id, {method:"PATCH", body:JSON.stringify({status:"achieved"})}); g.status = "achieved"; renderMain(); showToast("Goal achieved 🎉"); }
+  catch(e) { showToast("Could not update: " + e.message); }
+}
+async function deleteGoal(id) {
+  if(!confirm("Delete this goal?")) return;
+  try { await api("client_goals?id=eq."+id, {method:"DELETE"}); state.cGoals = (state.cGoals||[]).filter(function(x){ return x.id !== id; }); renderMain(); }
+  catch(e) { showToast("Could not delete: " + e.message); }
+}
+
+// ── PHOTOS: first vs latest ──
+function compareFirstLatest(angle) {
+  var list = state.progressPhotos.filter(function(p){ return p.angle === angle; }).sort(function(x,y){ return new Date(x.date) - new Date(y.date); });
+  if(list.length < 2) { showToast("Need two " + angle + " photos"); return; }
+  state.selectedPhotoIds = [list[0].id, list[list.length-1].id];
+  openPhotoCompare();
+}
+
+// ── LAB RESULTS ──
+var LAB_TESTS = [
+  {n:"ApoB", u:"mg/dL"}, {n:"LDL Cholesterol", u:"mg/dL"}, {n:"HDL Cholesterol", u:"mg/dL"}, {n:"Triglycerides", u:"mg/dL"},
+  {n:"Total Cholesterol", u:"mg/dL"}, {n:"Lipoprotein(a)", u:"nmol/L"}, {n:"Fasting Glucose", u:"mg/dL"}, {n:"HbA1c", u:"%"},
+  {n:"Fasting Insulin", u:"uIU/mL"}, {n:"hs-CRP", u:"mg/L"}, {n:"Vitamin D (25-OH)", u:"ng/mL"}, {n:"TSH", u:"mIU/L"},
+  {n:"Testosterone (Total)", u:"ng/dL"}, {n:"Ferritin", u:"ng/mL"}, {n:"Homocysteine", u:"umol/L"}, {n:"ALT", u:"U/L"},
+  {n:"AST", u:"U/L"}, {n:"eGFR", u:"mL/min/1.73m2"}
+];
+function labStatus(v, lo, hi) {
+  if(lo != null && lo !== "" && +v < +lo) return {t:"Below lab range", c:"var(--gold)", rgb:[160,125,30]};
+  if(hi != null && hi !== "" && +v > +hi) return {t:"Above lab range", c:"var(--gold)", rgb:[160,125,30]};
+  if((lo == null || lo === "") && (hi == null || hi === "")) return {t:"No range entered", c:"var(--muted)", rgb:[110,110,110]};
+  return {t:"Within lab range", c:"var(--green)", rgb:[30,140,90]};
+}
+function groupLabsByTest(labs) {
+  var map = {}, order = [];
+  (labs||[]).slice().sort(function(x,y){ return String(x.test_date).localeCompare(String(y.test_date)); }).forEach(function(r){
+    if(!map[r.test_name]) { map[r.test_name] = []; order.push(r.test_name); }
+    map[r.test_name].push(r);
+  });
+  return order.map(function(n){ return {name:n, rows:map[n]}; });
+}
+function renderLabsCardTrainer() {
+  var groups = groupLabsByTest(state.cLabs);
+  var html = '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:6px"><div class="clbl" style="margin-bottom:0">Lab Results</div><div style="display:flex;gap:6px">'
+    + (groups.length ? '<button class="chip" style="cursor:pointer;color:var(--gold)" onclick="generateLabReport()">📄 Lab Report</button>' : '')
+    + '<button class="chip" style="cursor:pointer;color:var(--teal2);background:var(--teal3)" onclick="openLabSheet()">+ Add Result</button></div></div>';
+  if(!groups.length) html += '<div style="color:var(--muted);font-size:12px;font-style:italic">No lab results yet. Enter values from the client\'s lab report to build a trends report.</div>';
+  groups.forEach(function(gp){
+    var last = gp.rows[gp.rows.length-1];
+    var st = labStatus(last.value, last.ref_low, last.ref_high);
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 0;border-top:1px solid var(--b1)">'
+      + '<div><div style="font-size:13px;font-weight:600">'+esc(gp.name)+'</div><div style="font-size:10px;color:var(--muted)">'+esc(last.test_date)+(gp.rows.length>1?' · '+gp.rows.length+' results':'')+'</div></div>'
+      + '<div style="text-align:right"><div style="font-size:14px;font-weight:700;color:var(--teal2)">'+last.value+' '+esc(last.unit||"")+'</div><div style="font-size:10px;color:'+st.c+'">'+st.t+'</div></div>'
+      + '<button onclick="deleteLabResult(\''+last.id+'\')" style="background:transparent;border:none;color:var(--muted);font-size:14px;cursor:pointer" title="Delete latest result">✕</button></div>';
+  });
+  html += '</div>';
+  return html;
+}
+function openLabSheet() {
+  var sel = document.getElementById("lb_test");
+  var existing = groupLabsByTest(state.cLabs).map(function(g){ return g.name; });
+  var names = LAB_TESTS.map(function(x){ return x.n; });
+  existing.forEach(function(n){ if(names.indexOf(n) < 0) names.push(n); });
+  sel.innerHTML = names.map(function(n){ return '<option value="'+esc(n)+'">'+esc(n)+'</option>'; }).join("") + '<option value="__other">Other…</option>';
+  var dEl = document.getElementById("lb_date"); if(!dEl.value) dEl.value = tod();
+  ["lb_value","lb_low","lb_high","lb_custom"].forEach(function(i){ document.getElementById(i).value = ""; });
+  document.getElementById("lb_custom_wrap").style.display = "none";
+  labTestChanged();
+  openSheet("labSheet");
+}
+function labTestChanged() {
+  var v = document.getElementById("lb_test").value;
+  document.getElementById("lb_custom_wrap").style.display = v === "__other" ? "block" : "none";
+  var prev = (state.cLabs||[]).filter(function(r){ return r.test_name === v; }).sort(function(x,y){ return String(y.test_date).localeCompare(String(x.test_date)); })[0];
+  var preset = LAB_TESTS.filter(function(x){ return x.n === v; })[0];
+  document.getElementById("lb_unit").value = prev ? (prev.unit||"") : (preset ? preset.u : "");
+  document.getElementById("lb_low").value = prev && prev.ref_low != null ? prev.ref_low : "";
+  document.getElementById("lb_high").value = prev && prev.ref_high != null ? prev.ref_high : "";
+}
+async function saveLabResult() {
+  var a = getActive(); if(!a) return;
+  var name = document.getElementById("lb_test").value;
+  if(name === "__other") name = document.getElementById("lb_custom").value.trim();
+  var val = document.getElementById("lb_value").value;
+  var date = document.getElementById("lb_date").value;
+  if(!name || val === "" || !date) { showToast("Add the test, result and date"); return; }
+  var lo = document.getElementById("lb_low").value, hi = document.getElementById("lb_high").value;
+  try {
+    var rows = await api("lab_results", {method:"POST", body:JSON.stringify({
+      client_id:a.id, test_date:date, test_name:name, value:+val, unit:document.getElementById("lb_unit").value.trim()||null,
+      ref_low: lo === "" ? null : +lo, ref_high: hi === "" ? null : +hi })});
+    if(rows && rows[0]) state.cLabs.unshift(rows[0]); else await loadClientData(a.id);
+    showToast(name + " saved ✓ — add another or tap Done");
+    document.getElementById("lb_value").value = "";
+    renderMain();
+  } catch(e) { showToast("Could not save: " + e.message); }
+}
+async function deleteLabResult(id) {
+  if(!confirm("Delete this lab result?")) return;
+  try { await api("lab_results?id=eq."+id, {method:"DELETE"}); state.cLabs = (state.cLabs||[]).filter(function(r){ return r.id !== id; }); renderMain(); }
+  catch(e) { showToast("Could not delete: " + e.message); }
+}
+
+function generateLabReport() {
+  var a = getActive(); if(!a) return;
+  var groups = groupLabsByTest(state.cLabs);
+  if(!groups.length) { showToast("No lab results to report"); return; }
+  if(!window.jspdf) { showToast("PDF library still loading, try again in a moment"); return; }
+  var coachNotes = "";
+  try {
+    var key = "f4l_lab_notes_" + a.id, prev = ""; try { prev = localStorage.getItem(key) || ""; } catch(e){}
+    var entered = prompt("Coach's notes for " + a.name + "'s lab report (optional).\nKeep it to training, nutrition and lifestyle focus. Do not interpret results medically. Leave blank to skip:", prev);
+    coachNotes = (entered || "").trim();
+    try { localStorage.setItem(key, coachNotes); } catch(e){}
+  } catch(e){}
+  var doc = new window.jspdf.jsPDF({ unit: "pt", format: "letter" });
+  var TEAL = [24,100,118], TEAL_DARK = [15,69,82], GOLD = [201,168,76], DARK = [26,26,26], MUTED = [110,110,110];
+  var pageW = doc.internal.pageSize.getWidth(), pageH = doc.internal.pageSize.getHeight();
+  var margin = 48, y = margin;
+  function line(color, x1, y1, x2, y2, w){ doc.setDrawColor.apply(doc,color); doc.setLineWidth(w||1); doc.line(x1,y1,x2,y2); }
+  function need(h){ if(y + h > pageH - 70){ doc.addPage(); y = margin; } }
+  function heading(text){ need(60); y += 8; doc.setFont("helvetica","bold"); doc.setFontSize(13); doc.setTextColor.apply(doc,TEAL_DARK); doc.text(text, margin, y); line(TEAL, margin, y+5, pageW-margin, y+5, 1.2); y += 22; }
+  function para(text, size, color, italic, gap){
+    doc.setFont("helvetica", italic?"italic":"normal"); doc.setFontSize(size||10); doc.setTextColor.apply(doc,color||DARK);
+    doc.splitTextToSize(text, pageW - margin*2).forEach(function(ln){ need(size+6); doc.text(ln, margin, y); y += (gap||(size+4)); });
+  }
+
+  try { doc.addImage(F4L_LOGO_BASE64, "PNG", margin, y-4, 30, 30); } catch(e){}
+  doc.setFont("helvetica","bold"); doc.setFontSize(14); doc.setTextColor.apply(doc,TEAL_DARK);
+  doc.text("FITNESS4LIFE120", margin+40, y+12);
+  doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor.apply(doc,MUTED);
+  doc.text("Lab Results Summary · Generated " + new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"}), margin+40, y+26);
+  y += 46; line(GOLD, margin, y, pageW-margin, y, 1.5); y += 26;
+  doc.setFont("helvetica","bold"); doc.setFontSize(20); doc.setTextColor.apply(doc,DARK); doc.text(a.name, margin, y); y += 20;
+
+  para("This summary was prepared from laboratory reports provided by the client or their healthcare provider. Reference ranges are the ranges printed on the client's laboratory report; they vary by laboratory, age and sex. \"Within\", \"above\" or \"below\" refers only to that printed range and is not a medical interpretation.", 9.5, MUTED, true, 12.5);
+  y += 6;
+
+  heading("Results and Trends");
+  var cx = [margin, margin+150, margin+235, margin+330, margin+410];
+  function head(){
+    doc.setFont("helvetica","bold"); doc.setFontSize(8.5); doc.setTextColor.apply(doc,MUTED);
+    ["TEST","LATEST","LAB RANGE","PRIOR","CHANGE"].forEach(function(h,i){ doc.text(h, cx[i], y); });
+    y += 6; line([210,210,210], margin, y, pageW-margin, y, 0.6); y += 14;
+  }
+  function r2(n){ return Math.round(n*100)/100; }
+  head();
+  var outside = [];
+  groups.forEach(function(gp){
+    if(y + 40 > pageH - 70){ doc.addPage(); y = margin; head(); }
+    var last = gp.rows[gp.rows.length-1], prior = gp.rows.length > 1 ? gp.rows[gp.rows.length-2] : null;
+    var st = labStatus(last.value, last.ref_low, last.ref_high);
+    var unit = last.unit ? " " + last.unit : "";
+    var range = (last.ref_low != null || last.ref_high != null) ? ((last.ref_low != null ? last.ref_low : "") + " - " + (last.ref_high != null ? last.ref_high : "")) : "not entered";
+    doc.setFont("helvetica","bold"); doc.setFontSize(10); doc.setTextColor.apply(doc,DARK); doc.text(gp.name, cx[0], y);
+    doc.setFont("helvetica","normal"); doc.text(r2(+last.value) + unit, cx[1], y); doc.text(range, cx[2], y);
+    doc.text(prior ? r2(+prior.value) + "" : "-", cx[3], y);
+    var chg = prior ? r2(+last.value - +prior.value) : null;
+    doc.text(chg === null ? "-" : ((chg > 0 ? "+" : "") + chg), cx[4], y);
+    y += 12;
+    doc.setFontSize(8); doc.setTextColor.apply(doc,st.rgb); doc.setFont("helvetica","bold");
+    doc.text(st.t, cx[0], y);
+    doc.setFont("helvetica","normal"); doc.setTextColor.apply(doc,MUTED);
+    doc.text("Tested " + last.test_date + (prior ? "  ·  prior " + prior.test_date : ""), cx[1], y);
+    y += 16;
+    if(st.t === "Above lab range" || st.t === "Below lab range") outside.push(gp.name);
+  });
+
+  if(outside.length) {
+    heading("Please Discuss With Your Physician");
+    para("These results fall outside the range printed on the laboratory report: " + outside.join(", ") + ". Please review them with your physician or the provider who ordered the tests.", 10, DARK, false, 14);
+  }
+
+  if(coachNotes) {
+    heading("Coach's Notes: Training and Lifestyle Focus");
+    para(coachNotes, 10.5, DARK, false, 14.5);
+  }
+
+  heading("Important Information");
+  para("Fitness4Life120 is not a medical practice and does not order, perform or interpret laboratory tests. This summary is provided for tracking and coaching context only. It is not a diagnosis, medical advice or a treatment recommendation. Laboratory results should be interpreted by your licensed healthcare provider. Do not start, stop or change any medication, supplement or treatment based on this report without consulting your physician. If you have symptoms or concerns, contact your healthcare provider promptly.", 9.5, MUTED, false, 12.5);
+
+  line(TEAL, margin, pageH-50, pageW-margin, pageH-50, 1);
+  doc.setFont("helvetica","italic"); doc.setFontSize(9.5); doc.setTextColor.apply(doc,GOLD);
+  doc.text("Empowering You to Live the Full 120", pageW/2, pageH-32, {align:"center"});
+  doc.save(a.name.replace(/[^a-z0-9]/gi,"_") + "_Lab_Report.pdf");
+  showToast("Lab report downloaded ✓");
+}
+
 function generateProgressReport() {
   var a = getActive();
   if(!a) return;
@@ -2672,6 +3011,28 @@ function generateProgressReport() {
     if(bpP) bodyLine("Blood pressure (latest, " + bpP.date + "): " + bpP.bp_systolic + "/" + bpP.bp_diastolic + " mmHg", {size:9.5, color:MUTED, gap:14});
   } else {
     bodyLine("Longevity markers will appear here once check-ins include VO2 max, HRV, resting heart rate, grip, balance and other tests.", {color:MUTED, size:9.5});
+  }
+
+
+  // Quarterly goals
+  var pdfGoals = state.cGoals || [];
+  if(pdfGoals.length) {
+    heading("Quarterly Goals");
+    pdfGoals.forEach(function(g){
+      var gi = goalProgressInfo(g, state.cProg);
+      need(34);
+      doc.setFont("helvetica","bold"); doc.setFontSize(10.5); doc.setTextColor.apply(doc,DARK);
+      doc.text(g.title, margin, y);
+      doc.setTextColor.apply(doc, gi.rgb); doc.text(gi.status, pageW-margin, y, {align:"right"});
+      y += 12;
+      doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor.apply(doc,MUTED);
+      doc.text(fmtGoalNum(+g.start_value, g.unit) + "  to  " + fmtGoalNum(gi.cur, g.unit) + "  (target " + fmtGoalNum(+g.target_value, g.unit) + (g.target_date ? ", by " + g.target_date : "") + ")", margin, y);
+      y += 8;
+      var barW = pageW - margin*2;
+      doc.setFillColor(232,232,232); doc.rect(margin, y, barW, 5, "F");
+      doc.setFillColor.apply(doc, gi.rgb); doc.rect(margin, y, Math.max(0.1, barW * gi.pct), 5, "F");
+      y += 18;
+    });
   }
 
   // Functional benchmarks (age/sex reference ranges)
@@ -2874,10 +3235,18 @@ function renderProgress() {
     if(a.wt_goal) html += '<div style="background:var(--bg);border:1px solid var(--b1);border-radius:7px;padding:12px 8px"><div style="font-family:Barlow Condensed;font-size:22px;font-weight:800;color:var(--green);line-height:1">'+a.wt_goal+' lbs</div><div style="font-family:Barlow Condensed;font-size:9px;letter-spacing:1px;color:var(--muted);text-transform:uppercase;margin-top:3px">Weight Goal</div></div>';
     html += '</div></div>';
   }
+  html += renderGoalsCardTrainer();
+  html += renderLabsCardTrainer();
   html += '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="clbl" style="margin-bottom:0">Progress Photos</div></div>';
   if(!state.progressPhotos.length) {
     html += '<div style="color:var(--muted);font-size:12px;font-style:italic">No progress photos yet</div>';
   } else {
+    var flAngles = ["Front","Side","Back"].filter(function(ang){ return state.progressPhotos.filter(function(p){ return p.angle===ang; }).length >= 2; });
+    if(flAngles.length) {
+      html += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:12px"><span style="font-size:11px;color:var(--muted);font-weight:700">First vs Latest:</span>';
+      flAngles.forEach(function(ang){ html += '<button onclick="compareFirstLatest(\''+ang+'\')" style="background:var(--teal3);border:1px solid var(--teal);color:var(--teal2);border-radius:14px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer">'+ang+'</button>'; });
+      html += '</div>';
+    }
     if(state.selectedPhotoIds.length === 2) {
       html += '<button onclick="openPhotoCompare()" style="width:100%;background:var(--teal);color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:12px">Compare Selected Photos</button>';
     }
@@ -3421,8 +3790,11 @@ async function loadClientData(id) {
       api("progress_photos?client_id=eq."+id+"&order=date.desc"),
       api("water_logs?client_id=eq."+id),
       api("daily_checkins?client_id=eq."+id+"&order=date.desc&limit=14"),
-      api("optional_workouts?client_id=eq."+id+"&order=created_at.desc")
+      api("optional_workouts?client_id=eq."+id+"&order=created_at.desc"),
+      api("client_goals?client_id=eq."+id+"&order=created_at.asc").catch(function(){ return []; }),
+      api("lab_results?client_id=eq."+id+"&order=test_date.desc").catch(function(){ return []; })
     ]);
+    state.cGoals = results[11]||[]; state.cLabs = results[12]||[];
     state.cLogs = results[0]; state.cProg = results[1]; state.cPlans = results[2]; state.datedPlans = results[3]||[]; state.nLogs = results[4]||[];
     state.habits = results[5]||[]; state.habitLogs = results[6]||[]; state.progressPhotos = results[7]||[]; state.waterLogs = results[8]||[];
     state.dailyCheckins = results[9]||[]; state.optionalWorkouts = results[10]||[]; state.mealPlans = [];
