@@ -2614,7 +2614,10 @@ function generateProgressReport() {
   heading("Milestones Earned");
   var milestones = getMilestonesTrainer().filter(function(m){ return m.earned; });
   if(milestones.length) {
-    bodyLine(milestones.map(function(m){ return m.icon+" "+m.label; }).join("     "), {size:11, gap:20});
+    // jsPDF's built-in font can't draw emoji (they print as garbage), so list labels only, 3 per row
+    for(var mi=0; mi<milestones.length; mi+=3){
+      bodyLine(milestones.slice(mi,mi+3).map(function(m){ return "\u2022 "+m.label; }).join("      "), {size:11, gap:(mi+3>=milestones.length?20:6)});
+    }
   } else {
     bodyLine("None yet — keep going!", {color:MUTED});
   }
